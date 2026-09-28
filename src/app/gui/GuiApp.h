@@ -904,7 +904,11 @@ private:
     // Where a pick of each kind last landed, so a session opens where the last
     // one left off rather than at the home directory.
     std::map<std::string, std::string> _dialog_dirs;
+#ifdef SS_COLMAP_EXE
+    std::string _colmap_exe = SS_COLMAP_EXE;
+#else
     std::string _colmap_exe = "colmap";
+#endif
     std::string _ffmpeg_exe = "ffmpeg";
 #ifdef _WIN32
     std::string _python_exe = "python";

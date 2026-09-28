@@ -221,6 +221,10 @@ if(NOT SS_DEFAULT_LANG IN_LIST SS_LANGUAGES)
         "  Choose one of: ${_ss_langs_pretty}")
 endif()
 
+# The GUI's COLMAP until one is picked in its settings; an absolute path
+# survives a Finder launch, whose PATH may not reach a bare "colmap".
+set(SS_COLMAP_EXE "colmap" CACHE STRING "Default COLMAP executable for the GUI")
+
 # This does NOT decide whether the UI renders in Japanese, Korean or Chinese.
 # It always does: the four subset faces in assets/fonts/ are embedded
 # unconditionally (422 KB, this program's own vocabulary in each region's own

@@ -230,7 +230,7 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/*.cpp ${SS_SRC}/app/gui/edit/*.cpp
         ${SS_SRC}/app/gui/render/*.cpp ${SS_SRC}/app/gui/mask/*.cpp)
     list(APPEND SS_TOOL_SOURCES ${SS_GUI_SOURCES})
-    list(APPEND SS_TOOL_DEFS SS_TOOL_GUI=1)
+    list(APPEND SS_TOOL_DEFS SS_TOOL_GUI=1 SS_COLMAP_EXE="${SS_COLMAP_EXE}")
     list(APPEND SS_TOOL_LIBS imgui_glfw OpenGL::GL)
 
     # The desktop's own file picker (src/app/gui/NativeDialog.h). Windows and

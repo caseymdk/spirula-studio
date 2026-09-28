@@ -96,11 +96,11 @@ void testChol(uint32_t n) {
 void testLapackGuard(uint32_t n) {
     if (!bacpu::lapackEnabled()) return;
     std::mt19937 rng(5);
-    std::uniform_real_distribution<double> small(-0.05, 0.05);
+    std::uniform_real_distribution<double> jitter(-0.05, 0.05);
     std::vector<double> A(bacpu::DenseSpd::elems(n)), rfp(A.size()), diag(n, 4.0);
     for (uint32_t r = 0; r < n; r++)
         for (uint32_t c = 0; c <= r; c++)
-            A[bacpu::DenseSpd::rowOff(r) + c] = r == c ? 4.0 : small(rng) / n;
+            A[bacpu::DenseSpd::rowOff(r) + c] = r == c ? 4.0 : jitter(rng) / n;
     int bad = 0;
     std::vector<double> a = A;
     if (!bacpu::lapackFactor(a.data(), rfp.data(), n, diag.data(), 0.1)) bad++;
