@@ -91,6 +91,15 @@ struct BgV1RgbParams {
 };
 static_assert(sizeof(BgV1RgbParams) == 8 * 8 + 12 * 4, "layout");
 
+// PPISP's v1 rgb pass also hands its per-pixel param grads to the grid pass.
+struct BpV1RgbParams {
+    BgV1RgbParams base;
+    uint64_t v_params;
+    int32_t write_rgb, _pad0;
+    uint64_t v_z;
+};
+static_assert(sizeof(BpV1RgbParams) == sizeof(BgV1RgbParams) + 24, "layout");
+
 struct BgV2Params {
     uint64_t fp32, q16, vbounds, rgb, v_output, v_bilagrid, v_rgb, offsets,
         grid_indices;
@@ -114,8 +123,9 @@ struct BpV1GridParams {
         grid_indices;
     int32_t N, L, H, W, m, h, w, h0, w0;
     int32_t mult_x, mult_y, m_batch_stride, has_grid_indices, _pad0;
+    uint64_t v_params, v_z;
 };
-static_assert(sizeof(BpV1GridParams) == 8 * 8 + 14 * 4, "layout");
+static_assert(sizeof(BpV1GridParams) == 10 * 8 + 14 * 4, "layout");
 
 // PPISP backward v2 (fused scatter). Uniform only + grid_indices; image-grad
 // always on. Mirrors slang bilagrid_ppisp.BpV2Params.
@@ -594,6 +604,40 @@ void launch_family_bwd_v1(
     backend::vk::SpecList spec =
         is_ppisp ? backend::vk::SpecList{r.vq, patched ? 1u : 0u, 0u, 0u}
                  : backend::vk::SpecList{r.vq, patched ? 1u : 0u};
+    const int64_t total = patched ? (int64_t)N * m * h * w : (int64_t)N * h * w;
+    auto fill_rgb = [&](BgV1RgbParams& p) {
+        p.fp32 = r.fp32; p.q16 = r.q16; p.vbounds = r.vbounds;
+        p.rgb = (uint64_t)in_buf;
+        p.v_output = (uint64_t)v_output;
+        p.v_rgb = (uint64_t)v_in;
+        p.offsets = vkk::or_fallback(offsets);
+        p.grid_indices = vkk::or_fallback(grid_indices);
+        p.N = N; p.L = L; p.H = H; p.W = W;
+        p.m = patched ? m : 1;
+        p.h = h; p.w = w;
+        p.h0 = patched ? h0 : 1;
+        p.w0 = patched ? w0 : 1;
+        p.has_grid_indices = (!patched && grid_indices != nullptr) ? 1 : 0;
+        p.total = (uint32_t)total;
+    };
+    // The grid pass redid PPISP's transform backward per (pixel, corner); the
+    // rgb pass does it once per pixel, so it runs first and leaves the 9 param
+    // grads behind (M5, 1080x1920: grid + rgb passes 19.8 ms -> ~9.5 ms).
+    uint64_t v_params = 0, v_z = 0;
+    if (is_ppisp && total > 0) {
+        v_params = (uint64_t)DevicePool::global().acquire_dynamic(
+            VramCategory::Appearance, "bilagrid_ppisp.v_params",
+            (size_t)total * 10 * sizeof(float));
+        v_z = v_params + (uint64_t)total * 9 * sizeof(float);
+        BpV1RgbParams p{};
+        fill_rgb(p.base);
+        p.v_params = v_params;
+        p.v_z = v_z;
+        p.write_rgb = v_in != nullptr ? 1 : 0;
+        if (!v_in) p.base.v_rgb = vkk::or_fallback((const float*)nullptr);
+        vkk::dispatch_flat(e.v1_rgb, spec, total, 256, &p, sizeof(p),
+                           &p.base.wgs_per_row);
+    }
     // grid-grad kernel
     {
         int mult_x, mult_y;
@@ -622,28 +666,19 @@ void launch_family_bwd_v1(
         p.mult_y = mult_y;
         p.m_batch_stride = num_m_batches;
         p.has_grid_indices = (!patched && grid_indices != nullptr) ? 1 : 0;
-        vkk::dispatch(e.v1_grid, spec, gx, gy, gz, &p, sizeof(p));
+        p.v_params = v_params;
+        p.v_z = v_z;
+        // Only the PPISP shader declares v_params.
+        vkk::dispatch(e.v1_grid, spec, gx, gy, gz, &p,
+                      is_ppisp ? sizeof(p) : offsetof(BpV1GridParams, v_params));
     }
     // input-grad kernel. null v_in = skip (the engine's depth/normal hooks
     // discard the GT-side grad; the CUDA launchers guard the same way) --
     // dispatching anyway would write C*h*w*12 bytes through a null device
     // address, which faults the device into a wait that never returns.
-    if (v_in != nullptr) {
-        int64_t total = patched ? (int64_t)N * m * h * w : (int64_t)N * h * w;
+    if (v_in != nullptr && !is_ppisp) {
         BgV1RgbParams p{};
-        p.fp32 = r.fp32; p.q16 = r.q16; p.vbounds = r.vbounds;
-        p.rgb = (uint64_t)in_buf;
-        p.v_output = (uint64_t)v_output;
-        p.v_rgb = (uint64_t)v_in;
-        p.offsets = vkk::or_fallback(offsets);
-        p.grid_indices = vkk::or_fallback(grid_indices);
-        p.N = N; p.L = L; p.H = H; p.W = W;
-        p.m = patched ? m : 1;
-        p.h = h; p.w = w;
-        p.h0 = patched ? h0 : 1;
-        p.w0 = patched ? w0 : 1;
-        p.has_grid_indices = (!patched && grid_indices != nullptr) ? 1 : 0;
-        p.total = (uint32_t)total;
+        fill_rgb(p);
         vkk::dispatch_flat(e.v1_rgb, spec, total, 256, &p, sizeof(p),
                            &p.wgs_per_row);
     }

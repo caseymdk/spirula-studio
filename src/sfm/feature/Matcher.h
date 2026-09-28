@@ -197,7 +197,7 @@ private:
                     if (!resident_.count(img)) addDesc += feats[img]->count();
                 }
             if (e > b && (res + addRes > resCap || desc + addDesc > descCap_ ||
-                          work + addWork > workCap))
+                          work + addWork > workCap || (!cc && e - b >= kMaxBatchPairs)))
                 break;
             res += addRes;
             desc += addDesc;
@@ -242,6 +242,20 @@ private:
         if (outCount > resultCap_)  // chunking bounds this; a bug if it ever trips
             throw std::runtime_error("match result buffer too small for a chunk");
 
+        // Row-only pairs write disjoint result regions, so the whole chunk is
+        // one dispatch; gx covers the widest pair and the rest exit early.
+        uint32_t rowsGx = 0;
+        if (!cc) {
+            pairInfo_.clear();
+            for (const Slot& s : slots) {
+                if (s.na == 0 || s.nb == 0) continue;
+                pairInfo_.insert(pairInfo_.end(), {resident_[s.a], s.na, resident_[s.b], s.nb,
+                                                   s.oa, 0u, 0u, 0u});
+                rowsGx = std::max(rowsGx, (s.na + kRowThreads - 1) / kRowThreads);
+            }
+            ctx_.upload(bPairs_, pairInfo_.data(), pairInfo_.size() * 4);
+        }
+
         VkCommandBuffer cb = ctx_.begin();
         if (normDirty_.first != normDirty_.second) {
             Push p;
@@ -251,15 +265,16 @@ private:
             ctx_.barrier(cb);
             normDirty_ = {0, 0};
         }
-        // One matrix per pair, then a fold of its column candidates. The two
-        // share colPartial, so they are separated by a barrier and consecutive
-        // pairs are too; each dispatch already fills the GPU, and the fold is
-        // tiny next to the matrix.
+        if (!cc && rowsGx)
+            ctx_.dispatch(cb, "match_rows", rowsGx, Push{},
+                          (uint32_t)(pairInfo_.size() / 8));
+        // Cross-checked: one pair at a time. Batching them measured slower on
+        // an M5 (89 s -> 105 s for the match stage): 64 concurrent pairs each
+        // stream their own train set, where one pair's 63 workgroups share it.
         for (const Slot& s : slots) {
+            if (!cc) break;
             if (s.na == 0 || s.nb == 0) continue;
-            // Workgroups for the cross-check path, which is 64 queries wide;
-            // the row-only kernel is kRowThreads wide and gets its own count
-            // below. u6 is read by reduce_cols, so it stays the 64-wide one.
+            // 64 queries wide; u6 is read by reduce_cols.
             uint32_t numWG = (s.na + 63) / 64;
             Push p;
             p.u0 = resident_[s.a];
@@ -269,20 +284,12 @@ private:
             p.u4 = s.oa;
             p.u5 = s.ob;
             p.u6 = numWG;
-            if (cc) {
-                // colPartial is shared between pairs, so each pair's matrix and
-                // column fold must retire before the next pair starts.
-                ctx_.dispatch(cb, "match_pair", numWG, p);
-                ctx_.barrier(cb);
-                ctx_.dispatch(cb, "reduce_cols", (s.nb + 63) / 64, p);
-                ctx_.barrier(cb);
-            } else {
-                // Row-only dispatches write disjoint result regions and read
-                // nothing another pair writes: the whole batch runs with no
-                // barriers, which is what keeps thousands of small scoring
-                // dispatches from serializing on pipeline drains.
-                ctx_.dispatch(cb, "match_rows", (s.na + kRowThreads - 1) / kRowThreads, p);
-            }
+            // colPartial is shared between pairs, so each pair's matrix and
+            // column fold must retire before the next pair starts.
+            ctx_.dispatch(cb, "match_pair", numWG, p);
+            ctx_.barrier(cb);
+            ctx_.dispatch(cb, "reduce_cols", (s.nb + 63) / 64, p);
+            ctx_.barrier(cb);
         }
         // Readback in the same command buffer as the dispatches: one submit and
         // one fence per chunk instead of two. Results are read straight out of
@@ -358,6 +365,8 @@ private:
     // launch four times the workgroups, each redoing that streaming for
     // queries that are not even in range.
     static constexpr uint32_t kRowThreads = 256;
+    // Pairs per match_rows dispatch: the grid's y extent, and bPairs_'s size.
+    static constexpr size_t kMaxBatchPairs = 8192;
 
     // One byte per component either way: uint8 as SIFT writes them, or f32
     // normalized and quantized on upload (see kQuantHalfRange).
@@ -470,7 +479,8 @@ private:
         bNorm_ = ctx_.createBuffer((VkDeviceSize)descCap_ * 4);
         bResult_ = ctx_.createBuffer((VkDeviceSize)resultCap_ * 16);
         bCol_ = ctx_.createBuffer((VkDeviceSize)colCap * 4);
-        ctx_.createDescriptors({bDesc_.buf, bNorm_.buf, bResult_.buf, bCol_.buf});
+        bPairs_ = ctx_.createBuffer((VkDeviceSize)kMaxBatchPairs * 32);
+        ctx_.createDescriptors({bDesc_.buf, bNorm_.buf, bResult_.buf, bCol_.buf, bPairs_.buf});
 
         size_t words = 0;
         const std::string blob = std::string(dot4_ ? "match" : "match_nodot") +
@@ -557,13 +567,14 @@ private:
     spirula::SubmitBudget budget_;
     bool dot4_ = true;  // device has VK_KHR_shader_integer_dot_product
     VkContext ctx_;
-    GpuBuffer bDesc_, bNorm_, bResult_, bCol_;
+    GpuBuffer bDesc_, bNorm_, bResult_, bCol_, bPairs_;
     bool setup_ = false;
     std::vector<const FeatureSet*> view_;      // scratch for the vector<FeatureSet> overload
     std::vector<uint32_t> stamp_;             // chunkEnd's "seen in this chunk" marks
     uint32_t epoch_ = 0;
     std::vector<uint32_t> res_;               // download scratch, reused across chunks
     std::vector<uint8_t> blob_;               // upload scratch, reused across chunks
+    std::vector<uint32_t> pairInfo_;          // match_rows parameters, 8 words a pair
     std::map<uint32_t, uint32_t> resident_;   // image index -> first descriptor index
     std::pair<uint32_t, uint32_t> normDirty_{0, 0};  // descriptor range awaiting ||d||^2
     int desc_words_ = 0;                      // 32 or 64, from the first FeatureSet

@@ -95,8 +95,10 @@ grows.
   copies to/from pinned memory record a direct `vkCmdCopyBuffer` — no
   staging hop, mirroring CUDA's pinned fast path.
 - Pageable-host copies go through a persistently-mapped staging ring with
-  timeline-based reclamation; sync copies wait, async-to-pageable degrades
-  to sync (same as CUDA).
+  timeline-based reclamation. Uploads return once the source is staged: a
+  sync one flushes every stream first so submission order puts it after all
+  earlier work, but the host never waits for that work. Downloads wait, and
+  async-to-pageable degrades to sync (same as CUDA).
 - `memset` = `vkCmdFillBuffer` with the byte replicated to a 32-bit word.
   Allocation sizes are rounded up to 4 so whole-tensor fills (the only
   pattern in the engine) never need a byte tail; non-4-aligned fills are
@@ -690,7 +692,12 @@ the engine level.
     reg-loss finals are 64-/32-wide with logical decode / a tid-0 guard).
     The warp-shuffle block reduce becomes a groupshared tree
     (`bg_block_add_64`); CUDA's fast/slow writeback three-path split is
-    preserved.
+    preserved. PPISP departs from CUDA in one respect: its v1_rgb pass runs
+    first and leaves each pixel's 9 param grads and grid z in scratch
+    (`bilagrid_ppisp.v_params`), so the grid pass accumulates those instead
+    of redoing the autodiff transform backward per (pixel, corner). Same
+    math and summation order; on an M5 at 1080x1920 the pair went from
+    19.8 ms to ~9.5 ms a step.
   - **Fused TV-Adam/AdaGrad**: one 256-cell codec block per workgroup;
     Adam moments through QuantizedAdamState<4|8>, the AdaGrad accumulator
     through a new QuantizedTensorLog<4|8> port in optim_quant.slang

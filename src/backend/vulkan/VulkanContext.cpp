@@ -560,9 +560,11 @@ void Context::init() {
     }
 
     // Poll-based waits by default on real GPUs; SS_VK_POLL_WAIT=0/1
-    // forces either mode (mainly for A/B timing).
+    // forces either mode (mainly for A/B timing). Not on Apple: the spinning
+    // core shares the SoC's power budget (M5, 1000 steps: 54.3 s vs 48.7 s).
     _poll_waits =
-        probe.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU;
+        probe.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU &&
+        probe.props.vendorID != 0x106B;
     if (const char* env = spirula::env("VK_POLL_WAIT"); env && env[0])
         _poll_waits = env[0] != '0';
 

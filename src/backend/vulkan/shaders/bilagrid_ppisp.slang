@@ -310,21 +310,10 @@ void bilagrid_ppisp_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 }
 
 // ---------------------------------------------------------------------------
-// backward v1: grid-grad kernel (8x8x1, shmem corner preload)
+// backward v1: grid-grad kernel (8x8x1)
 // ---------------------------------------------------------------------------
 
-static const int kBpFootX = kBgV1BlockX + 2;  // 10
-static const int kBpFootY = kBgV1BlockY + 2;  // 10
-static const int kBpFootZ = 3;
 static const int kBpChans = 9;
-static const int kBpCells = kBpFootX * kBpFootY * kBpFootZ;  // 300
-
-groupshared float _bp_shmem[kBpFootZ * kBpFootY * kBpFootX * kBpChans];
-
-[ForceInline]
-int _bp_sh_idx(int lz, int ly, int lx, int ci) {
-    return ((lz * kBpFootY + ly) * kBpFootX + lx) * kBpChans + ci;
-}
 
 struct BpV1GridParams {
     float* fp32;
@@ -339,6 +328,10 @@ struct BpV1GridParams {
     int mult_x, mult_y, m_batch_stride;
     int has_grid_indices;
     int _pad0;
+    // Written by the v1_rgb pass, which runs first: each pixel's 9 param
+    // grads, and its grid z (-1: no incoming grad).
+    float* v_params;
+    float* v_z;
 };
 
 [shader("compute")]
@@ -348,8 +341,8 @@ struct BpV1GridParams {
 void bilagrid_ppisp_bwd_v1_grid(uint3 bid: SV_GroupID, uint ltid: SV_GroupThreadID,
                                 uniform BpV1GridParams p) {
     uint3 t = uint3(ltid % 8u, ltid / 8u, 0u);
-    // Block-uniform decode BEFORE any per-thread early return (the preload
-    // barrier below must be reached by all 64 threads).
+    // Block-uniform decode BEFORE any per-thread early return (the block
+    // reduction at the end must be reached by all 64 threads).
     int block_z_total =
         kPatched != 0 ? p.N * p.m_batch_stride * p.L : p.N * p.L;
     if (int(bid.z) >= block_z_total) return;
@@ -362,30 +355,6 @@ void bilagrid_ppisp_bwd_v1_grid(uint3 bid: SV_GroupID, uint ltid: SV_GroupThread
         idx_block /= p.m_batch_stride;
     }
     int ni = idx_block;
-    int g_id = kPatched != 0
-                   ? ni
-                   : (p.has_grid_indices != 0 ? p.grid_indices[ni] : ni);
-    int corner_base = g_id * p.L * p.H * p.W * kBpChans;
-
-    // Cooperative preload of the block's corner footprint.
-    int base_xi = (int(bid.x) * kBgV1BlockX) / p.mult_x - 1;
-    int base_yi = (int(bid.y) * kBgV1BlockY) / p.mult_y - 1;
-    int base_zi = zi - 1;
-    BgReader r = {p.fp32, p.q16, p.vbounds};
-
-    for (int local = int(ltid); local < kBpCells; local += 64) {
-        int lx = local % kBpFootX;
-        int ly = (local / kBpFootX) % kBpFootY;
-        int lz = local / (kBpFootX * kBpFootY);
-        int gxc = min(max(base_xi + lx, 0), p.W - 1);
-        int gyc = min(max(base_yi + ly, 0), p.H - 1);
-        int gzc = min(max(base_zi + lz, 0), p.L - 1);
-        int g_off = corner_base + ((gzc * p.H + gyc) * p.W + gxc) * kBpChans;
-        for (int ci = 0; ci < kBpChans; ci++)
-            _bp_shmem[_bp_sh_idx(lz, ly, lx, ci)] =
-                bg_read(kValueQuant != 0, r, g_off + ci);
-    }
-    GroupMemoryBarrierWithGroupSync();
 
     int x_idx = int(bid.x) * kBgV1BlockX + int(t.x);
     int y_idx = int(bid.y) * kBgV1BlockY + int(t.y);
@@ -437,65 +406,19 @@ void bilagrid_ppisp_bwd_v1_grid(uint3 bid: SV_GroupID, uint ltid: SV_GroupThread
                     x = float(wi) / float(p.w - 1) * float(p.W - 1);
                     y = float(hi) / float(p.h - 1) * float(p.H - 1);
                 }
-                float sr = p.rgb[g_off + 0];
-                float sg = p.rgb[g_off + 1];
-                float sb = p.rgb[g_off + 2];
-                float z = kC2G_r * sr + kC2G_g * sg + kC2G_b * sb;
-                z = min(max(z, 0.0f), 1.0f) * float(p.L - 1);
-
+                // The transform backward ran once per pixel in the rgb pass,
+                // not once per (pixel, corner) here: same math and order.
+                // A 4-byte z also rejects 3 in 4 visits without reading rgb.
+                float z = p.v_z[g_off / 3];
+                if (z < 0.0f) continue;
                 BgCells c = bg_cells_uniform(0, p.L, p.H, p.W, kBpChans, x, y,
                                              z);
                 if (zi != c.z0 && zi != c.z1) continue;
 
-                // Every grid gradient this pixel gives is linear in its
-                // incoming one, so a zero one -- a masked pixel, mostly --
-                // gives nothing and skips the interpolation below.
-                float3 v_out = float3(p.v_output[g_off + 0],
-                                      p.v_output[g_off + 1],
-                                      p.v_output[g_off + 2]);
-                if (all(v_out == float3(0.0f))) continue;
-
-                // Defensive shmem-index clamps (fast-math integer-boundary
-                // rationale — see the CUDA kernel).
-                int sx0 = max(c.x0 - base_xi, 0);
-                int sx1 = min(c.x1 - base_xi, kBpFootX - 1);
-                int sy0 = max(c.y0 - base_yi, 0);
-                int sy1 = min(c.y1 - base_yi, kBpFootY - 1);
-                int sz0 = max(c.z0 - base_zi, 0);
-                int sz1 = min(c.z1 - base_zi, kBpFootZ - 1);
-
-                float exposure = 0.0f;
-                ColorPPISPParams cp = {float2(0.0f, 0.0f), float2(0.0f, 0.0f), float2(0.0f, 0.0f), float2(0.0f, 0.0f)};
-                [ForceUnroll]
-                for (int ci = 0; ci < kBpChans; ci++) {
-                    float v000 = _bp_shmem[_bp_sh_idx(sz0, sy0, sx0, ci)];
-                    float v001 = _bp_shmem[_bp_sh_idx(sz0, sy0, sx1, ci)];
-                    float v010 = _bp_shmem[_bp_sh_idx(sz0, sy1, sx0, ci)];
-                    float v011 = _bp_shmem[_bp_sh_idx(sz0, sy1, sx1, ci)];
-                    float v100 = _bp_shmem[_bp_sh_idx(sz1, sy0, sx0, ci)];
-                    float v101 = _bp_shmem[_bp_sh_idx(sz1, sy0, sx1, ci)];
-                    float v110 = _bp_shmem[_bp_sh_idx(sz1, sy1, sx0, ci)];
-                    float v111 = _bp_shmem[_bp_sh_idx(sz1, sy1, sx1, ci)];
-                    float c00 = v000 * (1.0f - c.fx) + v001 * c.fx;
-                    float c01 = v010 * (1.0f - c.fx) + v011 * c.fx;
-                    float c10 = v100 * (1.0f - c.fx) + v101 * c.fx;
-                    float c11 = v110 * (1.0f - c.fx) + v111 * c.fx;
-                    float c0 = c00 * (1.0f - c.fy) + c01 * c.fy;
-                    float c1 = c10 * (1.0f - c.fy) + c11 * c.fy;
-                    _bp_set_param(exposure, cp, ci,
-                                  c0 * (1.0f - c.fz) + c1 * c.fz);
-                }
-
-                float3 v_rgb;
-                float v_e;
-                ColorPPISPParams v_cp;
-                _bp_transform_bwd(float3(sr, sg, sb), exposure, cp, v_out,
-                                  v_rgb, v_e, v_cp);
-
                 float accum_t = bg_v1_accum_t(xi, yi, zi, c);
                 [ForceUnroll]
                 for (int ci = 0; ci < kBpChans; ci++)
-                    accum[ci] += accum_t * _bp_get_param(v_e, v_cp, ci);
+                    accum[ci] += accum_t * p.v_params[g_off * 3 + ci];
             }
         }
     }
@@ -533,6 +456,10 @@ struct BpV1RgbParams {
     int has_grid_indices;
     uint total;
     uint wgs_per_row;
+    float* v_params;  // the 9 param grads per pixel, for the grid pass
+    int write_rgb;    // 0: v_params / v_z only (the caller wants no image grad)
+    int _pad0;
+    float* v_z;       // grid z per pixel, -1 for a zero v_out
 };
 
 [shader("compute")]
@@ -564,9 +491,12 @@ void bilagrid_ppisp_bwd_v1_rgb(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     // The image gradient is linear in the incoming one, so a zero one -- a
     // masked pixel, mostly -- is zero out and skips the corner loads.
     if (all(v_out == float3(0.0f))) {
-        p.v_rgb[g_off3 + 0] = 0.0f;
-        p.v_rgb[g_off3 + 1] = 0.0f;
-        p.v_rgb[g_off3 + 2] = 0.0f;
+        if (p.write_rgb != 0) {
+            p.v_rgb[g_off3 + 0] = 0.0f;
+            p.v_rgb[g_off3 + 1] = 0.0f;
+            p.v_rgb[g_off3 + 2] = 0.0f;
+        }
+        p.v_z[g_off3 / 3] = -1.0f;
         return;
     }
 
@@ -591,6 +521,11 @@ void bilagrid_ppisp_bwd_v1_rgb(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     ColorPPISPParams v_cp;
     _bp_transform_bwd(float3(sr, sg, sb), exposure, cp, v_out, v_rgb, v_e,
                       v_cp);
+    [ForceUnroll]
+    for (int ci = 0; ci < 9; ci++)
+        p.v_params[g_off3 * 3 + ci] = _bp_get_param(v_e, v_cp, ci);
+    p.v_z[g_off3 / 3] = z;
+    if (p.write_rgb == 0) return;
 
     float d8[8];
     bg_dwdz(c, d8);

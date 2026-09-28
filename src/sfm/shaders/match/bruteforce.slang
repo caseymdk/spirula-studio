@@ -95,6 +95,8 @@ static const uint TT = (DESC_WORDS >= 64) ? 32 : 64;  // trains per shared tile
 [[vk::binding(1)]] RWStructuredBuffer<uint>  norm;   // ||d||^2 per descriptor
 [[vk::binding(2)]] RWStructuredBuffer<uint4> result; // (bestIdx, bestD2, secondD2, 0)
 [[vk::binding(3)]] RWStructuredBuffer<uint>  colPartial;  // numWG * nTrain packed candidates
+// match_rows, gid.y = pair: (dQ, nQuery, dT, nTrain), (outA, 0, 0, 0).
+[[vk::binding(4)]] StructuredBuffer<uint4>   pairInfo;
 
 // ||d||^2 for a run of descriptors, once per upload. u0 = first descriptor
 // index, u1 = how many.
@@ -125,12 +127,10 @@ groupshared uint sCol[TT];               // packed (d2 << 6) | localQuery
 // increasing index order either way, so the result is bit-identical.
 
 // Row reduction shared by both match entry points; WITH_COLS also feeds the
-// column candidates for the cross-check. match_rows exists because dispatches
-// that skip the column side share no writable state (disjoint `result`
-// regions, read-only desc/norm), so a whole batch of them can run with *no*
-// inter-pair barriers -- that is what makes pair-selection scoring (thousands
-// of tiny dispatches per submit) GPU-bound instead of pipeline-drain-bound.
-void matchImpl<let WITH_COLS : bool, let NQ : uint>(uint3 gid, uint3 lid) {
+// column candidates for the cross-check. Without them pairs share no writable
+// state, so match_rows runs a whole batch as one barrier-free dispatch.
+void matchImpl<let WITH_COLS : bool, let NQ : uint>(uint3 gid, uint3 lid, uint dQ, uint nQuery,
+                                                    uint dT, uint nTrain, uint outA) {
     const uint lq = lid.x;
     const uint q = gid.x * NQ + lq;
     const bool active = q < nQuery;
@@ -187,14 +187,17 @@ void matchImpl<let WITH_COLS : bool, let NQ : uint>(uint3 gid, uint3 lid) {
 
 [shader("compute")] [numthreads(64, 1, 1)]
 void match_pair(uint3 gid : SV_GroupID, uint3 lid : SV_GroupThreadID) {
-    matchImpl<true, TQ>(gid, lid);
+    matchImpl<true, TQ>(gid, lid, dQ, nQuery, dT, nTrain, outA);
 }
 
-// Row side only: for callers that skip the cross-check (pair-selection
-// scoring). Writes nothing shared between pairs.
+// Pair-selection scoring, gid.y = pair. MoltenVK runs a compute encoder's
+// dispatches back to back, so a 2-workgroup dispatch per pair idled most of an
+// M5: 123-image selection went from 112 s to 39 s.
 [shader("compute")] [numthreads(256, 1, 1)]
 void match_rows(uint3 gid : SV_GroupID, uint3 lid : SV_GroupThreadID) {
-    matchImpl<false, TQR>(gid, lid);
+    const uint4 a = pairInfo[2 * gid.y];
+    if (gid.x * TQR >= a.y) return;  // whole workgroup past this pair's queries
+    matchImpl<false, TQR>(gid, lid, a.x, a.y, a.z, a.w, pairInfo[2 * gid.y + 1].x);
 }
 
 // Fold the per-workgroup column candidates into the B-side result. Only

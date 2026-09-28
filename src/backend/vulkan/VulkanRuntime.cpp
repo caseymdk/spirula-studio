@@ -527,9 +527,10 @@ bool range_ok(const ResolvedPtr& r, size_t bytes, const char* what) {
     return true;
 }
 
-// Sync H2D from pageable host memory via the staging ring.
-void staged_upload_sync(const ResolvedPtr& dst, const void* src,
-                        size_t bytes) {
+// H2D from pageable memory, stream-ordered on `st`: returns once the source
+// is staged, the copy submitted but not waited for.
+void staged_upload_async(vk::StreamImpl* st, const ResolvedPtr& dst,
+                         const void* src, size_t bytes) {
     std::lock_guard<std::mutex> lock(vk::g_transfer_mutex);
     size_t done = 0;
     while (done < bytes) {
@@ -537,10 +538,13 @@ void staged_upload_sync(const ResolvedPtr& dst, const void* src,
         vk::StagingRegion reg;
         if (!vk::staging_acquire(n, &reg)) return;
         std::memcpy(reg.mapped, (const char*)src + done, n);
-        vk::record_and_wait([&](VkCommandBuffer cb) {
-            VkBufferCopy c{reg.offset, dst.offset + done, n};
-            vkCmdCopyBuffer(cb, reg.buffer, dst.alloc.buffer, 1, &c);
-        });
+        VkCommandBuffer cb = vk::stream_begin(st);
+        if (cb == VK_NULL_HANDLE) return;
+        VkBufferCopy c{reg.offset, dst.offset + done, n};
+        vkCmdCopyBuffer(cb, reg.buffer, dst.alloc.buffer, 1, &c);
+        vk::stream_barrier(cb);
+        uint64_t value = vk::stream_flush(st);
+        vk::staging_release(reg, n, value);
         done += n;
     }
 }
@@ -594,6 +598,17 @@ void memcpy_sync(void* dst, const void* src, size_t bytes, MemcpyKind kind) {
     if (src_dev && !range_ok(s, bytes, "memcpy_sync: src range overflow"))
         return;
 
+    // Pageable upload: the source is staged before returning and submission
+    // order (other streams flushed first) orders the device side, so no host
+    // wait -- a training step issues ~9 of these, and each drained the queue.
+    if (dst_dev && !src_dev && !s.known) {
+        std::optional<prof::Scope> _psc;
+        if (prof::enabled()) _psc.emplace(prof::H2D, bytes);
+        vk::flush_all_streams();
+        staged_upload_async(vk::stream_impl(kDefaultStream), d, src, bytes);
+        return;
+    }
+
     // Profiling: attribute the pending-work drain to DEVSYNC so the copy
     // scope below measures pure transfer (the wait() a few lines down is then
     // a no-op). Same scheme as the CUDA backend for comparable numbers.
@@ -622,8 +637,6 @@ void memcpy_sync(void* dst, const void* src, size_t bytes, MemcpyKind kind) {
                 VkBufferCopy c{s.offset, d.offset, bytes};
                 vkCmdCopyBuffer(cb, s.alloc.buffer, d.alloc.buffer, 1, &c);
             });
-        } else {
-            staged_upload_sync(d, src, bytes);
         }
     } else {
         if (d.known) {  // pinned destination
@@ -700,26 +713,8 @@ void memcpy_async(void* dst, const void* src, size_t bytes, MemcpyKind kind,
             vk::stream_barrier(cb);
             return;
         }
-        // Pageable source: stage chunks; each chunk is submitted (not
-        // waited), so the call returns once the data is staged — the CUDA
-        // pageable-async contract.
-        std::lock_guard<std::mutex> lock(vk::g_transfer_mutex);
-        size_t done = 0;
-        while (done < bytes) {
-            size_t n =
-                std::min((size_t)vk::staging_max_chunk(), bytes - done);
-            vk::StagingRegion reg;
-            if (!vk::staging_acquire(n, &reg)) return;
-            std::memcpy(reg.mapped, (const char*)src + done, n);
-            VkCommandBuffer cb = vk::stream_begin(st);
-            if (cb == VK_NULL_HANDLE) return;
-            VkBufferCopy c{reg.offset, d.offset + done, n};
-            vkCmdCopyBuffer(cb, reg.buffer, d.alloc.buffer, 1, &c);
-            vk::stream_barrier(cb);
-            uint64_t value = vk::stream_flush(st);
-            vk::staging_release(reg, n, value);
-            done += n;
-        }
+        // Pageable source: the CUDA pageable-async contract.
+        staged_upload_async(st, d, src, bytes);
         return;
     }
 

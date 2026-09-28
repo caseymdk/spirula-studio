@@ -11,6 +11,12 @@
 #define STBI_NO_PIC
 #define STBI_NO_GIF
 
+// x86-64 gets SSE2 automatically; arm64 has to ask for the NEON JPEG IDCT,
+// colour conversion and upsampling.
+#if defined(__aarch64__) || defined(_M_ARM64)
+#  define STBI_NEON
+#endif
+
 // Silence two warnings stb_image is noisy about under -Wsign-compare /
 // -Wunused-but-set-variable on recent GCCs.
 #if defined(__GNUC__)
