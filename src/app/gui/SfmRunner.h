@@ -109,6 +109,9 @@ struct SfmJob {
     // Pair selection only: also match each image with its neighbours in file
     // order, the converse of the above.
     bool prefilter_sequential = false;
+    // Whenever pair selection runs: match the neighbours of what verified,
+    // round after round (sfm --pair-expansion).
+    bool pair_expansion = true;
     // Hand the reconstruction the frame order of every video and of every
     // folder marked as shot in order (the manifest's `sequences:`), so the
     // mapper places an image among its neighbours before it consults the rest.

@@ -2121,6 +2121,40 @@ SS_MSG(match_sequential_added,
     TR("dosya sırasındaki komşular eklenen çift: {0}, seçilen çiftlere ek "
        "olarak: {1} (pencere: {2}). --no-prefilter-sequential bunu kapatır."));
 
+SS_MSG(match_expansion_round,
+    EN("pair expansion, round {0}: neighbours kept: {1}/{2}, rejected by the "
+       "rotation check: {4}, seeds: {3}. --no-pair-expansion turns this off."),
+    JA("ペア拡張、ラウンド {0}: 残った隣の組み合わせ: {1}/{2}、回転チェックで除外: "
+       "{4}、起点: {3}。--no-pair-expansion で無効にできます。"),
+    ZH_HANS("像对扩展，第 {0} 轮：保留的相邻组合：{1}/{2}，被旋转检查剔除：{4}，"
+            "起点：{3}。用 --no-pair-expansion 可关闭。"),
+    ZH_HANT("影像對擴展，第 {0} 輪：保留的相鄰組合：{1}/{2}，被旋轉檢查剔除：{4}，"
+            "起點：{3}。用 --no-pair-expansion 可關閉。"),
+    KO("쌍 확장, {0}번째 차례: 남긴 이웃: {1}/{2}, 회전 검사로 제외: {4}, "
+       "시작점: {3}. --no-pair-expansion 으로 끌 수 있습니다."),
+    DE("Paarerweiterung, Runde {0}: behaltene Nachbarn: {1}/{2}, von der "
+       "Rotationsprüfung verworfen: {4}, Ausgangspaare: {3}. --no-pair-expansion "
+       "schaltet das ab."),
+    FR("extension des paires, tour {0} : voisines gardées : {1}/{2}, rejetées "
+       "par le contrôle de rotation : {4}, paires de départ : {3}. "
+       "--no-pair-expansion désactive cela."),
+    ES("expansión de pares, ronda {0}: vecinos conservados: {1}/{2}, rechazados "
+       "por la comprobación de rotación: {4}, pares de partida: {3}. "
+       "--no-pair-expansion lo desactiva."),
+    PT("expansão de pares, rodada {0}: vizinhos mantidos: {1}/{2}, rejeitados "
+       "pela verificação de rotação: {4}, pares de partida: {3}. "
+       "--no-pair-expansion desliga isso."),
+    IT("espansione delle coppie, giro {0}: vicini tenuti: {1}/{2}, scartati dal "
+       "controllo di rotazione: {4}, coppie di partenza: {3}. --no-pair-expansion "
+       "lo disattiva."),
+    NL("paaruitbreiding, ronde {0}: behouden buren: {1}/{2}, afgewezen door de "
+       "rotatiecontrole: {4}, startparen: {3}. --no-pair-expansion zet dit uit."),
+    RU("расширение пар, раунд {0}: оставлено соседей: {1}/{2}, отброшено "
+       "проверкой поворота: {4}, исходные пары: {3}. --no-pair-expansion это "
+       "отключает."),
+    TR("çift genişletme, tur {0}: tutulan komşu: {1}/{2}, dönüş denetiminin "
+       "reddettiği: {4}, başlangıç çifti: {3}. --no-pair-expansion bunu kapatır."));
+
 SS_MSG(match_rig_pairs_added,
     EN("rig-mates of verified pairs kept: {0}/{1} (from {2} pairs with enough "
        "inliers). --no-rig-pairs turns this off."),

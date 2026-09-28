@@ -8,6 +8,7 @@
 
 #include "sfm/core/Matches.h"
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -133,7 +134,8 @@ struct State {
 
     // The pair matrix, binned down to kMatrixBins per side.
     uint32_t n_images = 0, bins = 0;
-    std::vector<uint32_t> counts, planned, verified;
+    std::vector<uint32_t> counts, planned, verified, stage;
+    uint32_t phase = 0, phase_planned = 0, phase_verified = 0, phase_matched = 0;
     bool pairs_dirty = false;
 
     // Appended by the verification workers, so it carries its own lock and
@@ -199,14 +201,19 @@ void write_pairs_locked() {
     State& s = state();
     if (!s.pairs_dirty || s.counts.empty()) return;
     std::string b;
-    b.reserve(16 + s.counts.size() * 12);
+    b.reserve(16 + s.counts.size() * 16);
     put(b, "VKPP", 4);
-    put_u32(b, 2);
+    put_u32(b, 3);
     put_u32(b, s.n_images);
     put_u32(b, s.bins);
     put(b, s.counts.data(), s.counts.size() * 4);
     put(b, s.planned.data(), s.planned.size() * 4);
     put(b, s.verified.data(), s.verified.size() * 4);
+    put(b, s.stage.data(), s.stage.size() * 4);
+    put_u32(b, s.phase);
+    put_u32(b, s.phase_planned);
+    put_u32(b, s.phase_verified);
+    put_u32(b, s.phase_matched);
     write_atomic("pairs.bin", b);
     s.pairs_dirty = false;
 }
@@ -336,6 +343,10 @@ void begin_matching(uint32_t n_images,
     s.counts.assign((size_t)s.bins * s.bins, 0);
     s.planned.assign((size_t)s.bins * s.bins, 0);
     s.verified.assign((size_t)s.bins * s.bins, 0);
+    s.stage.assign((size_t)s.bins * s.bins, 0);
+    s.phase = 0;
+    s.phase_planned = (uint32_t)pairs.size();
+    s.phase_verified = s.phase_matched = 0;
     for (const auto& p : pairs) {
         if (p.first >= n_images || p.second >= n_images) continue;
         size_t mirror = 0;
@@ -347,6 +358,27 @@ void begin_matching(uint32_t n_images,
     s.pairs_dirty = true;
 }
 
+void add_candidates(const std::vector<std::pair<uint32_t, uint32_t>>& pairs, uint32_t round) {
+    State& s = state();
+    std::lock_guard<std::mutex> lk(s.mu);
+    if (s.dir.empty() || s.counts.empty()) return;
+    s.phase = round;
+    s.phase_planned = (uint32_t)pairs.size();
+    s.phase_verified = s.phase_matched = 0;
+    for (const auto& p : pairs) {
+        if (p.first >= s.n_images || p.second >= s.n_images) continue;
+        size_t mirror = 0;
+        const size_t c = cell_of(s, p.first, p.second, mirror);
+        for (size_t k : {c, mirror}) {
+            if (!s.planned[k]) s.stage[k] = round;
+            s.planned[k]++;
+            if (mirror == c) break;
+        }
+    }
+    s.pairs_dirty = true;
+    write_pairs_locked();
+}
+
 void pair(uint32_t image1, uint32_t image2, uint32_t inliers) {
     State& s = state();
     std::lock_guard<std::mutex> lk(s.mu);
@@ -356,10 +388,26 @@ void pair(uint32_t image1, uint32_t image2, uint32_t inliers) {
     const size_t c = cell_of(s, image1, image2, mirror);
     s.counts[c] += inliers;
     s.verified[c]++;
+    s.phase_verified++;
+    if (inliers) s.phase_matched++;
     if (mirror != c) {
         s.counts[mirror] += inliers;
         s.verified[mirror]++;
     }
+    s.pairs_dirty = true;
+    if (due(s.pairs_at, s.pairs_started)) write_pairs_locked();
+}
+
+void reject(uint32_t image1, uint32_t image2, uint32_t inliers) {
+    State& s = state();
+    std::lock_guard<std::mutex> lk(s.mu);
+    if (s.dir.empty() || s.counts.empty() || !inliers) return;
+    if (image1 >= s.n_images || image2 >= s.n_images) return;
+    size_t mirror = 0;
+    const size_t c = cell_of(s, image1, image2, mirror);
+    s.counts[c] -= std::min(s.counts[c], inliers);
+    if (mirror != c) s.counts[mirror] -= std::min(s.counts[mirror], inliers);
+    if (s.phase_matched) s.phase_matched--;
     s.pairs_dirty = true;
     if (due(s.pairs_at, s.pairs_started)) write_pairs_locked();
 }

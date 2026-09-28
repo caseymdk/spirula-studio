@@ -672,6 +672,96 @@ SS_MSG(matrix_key_pending,
     PT("Em espera"),     IT("In attesa"),    NL("Wacht"),        RU("В очереди"),
     TR("Bekliyor"));
 
+SS_MSG(matrix_key_matched_earlier,
+    EN("Matched earlier"),
+    JA("前の段階で対応あり"),
+    ZH_HANS("之前已匹配"),
+    ZH_HANT("先前已比對"),
+    KO("이전 단계에서 대응됨"),
+    DE("Früher zugeordnet"),
+    FR("Appariées plus tôt"),
+    ES("Emparejadas antes"),
+    PT("Pareadas antes"),
+    IT("Confrontate prima"),
+    NL("Eerder gekoppeld"),
+    RU("Сопоставлено ранее"),
+    TR("Daha önce eşleşti"));
+
+SS_MSG(matrix_key_none_earlier,
+    EN("No match earlier"),
+    JA("前の段階で対応なし"),
+    ZH_HANS("之前无匹配"),
+    ZH_HANT("先前無比對"),
+    KO("이전 단계에서 대응 없음"),
+    DE("Früher keine Übereinstimmung"),
+    FR("Aucune correspondance plus tôt"),
+    ES("Sin coincidencias antes"),
+    PT("Sem correspondência antes"),
+    IT("Nessuna corrispondenza prima"),
+    NL("Eerder geen overeenkomst"),
+    RU("Ранее совпадений нет"),
+    TR("Daha önce eşleşme yok"));
+
+SS_MSG(matrix_phase_selection,
+    EN("Phase: pair selection"),
+    JA("段階: ペア選択"),
+    ZH_HANS("阶段：像对筛选"),
+    ZH_HANT("階段：影像對篩選"),
+    KO("단계: 쌍 선택"),
+    DE("Phase: Paarauswahl"),
+    FR("Phase : sélection des paires"),
+    ES("Fase: selección de pares"),
+    PT("Fase: seleção de pares"),
+    IT("Fase: selezione delle coppie"),
+    NL("Fase: paarselectie"),
+    RU("Этап: отбор пар"),
+    TR("Aşama: çift seçimi"));
+
+SS_MSG(matrix_phase_counts,
+    EN("Waiting: {0}   Checked: {1}/{2}   Matched: {3}"),
+    JA("待機中: {0}   確認済み: {1}/{2}   対応あり: {3}"),
+    ZH_HANS("等待中：{0}   已检查：{1}/{2}   已匹配：{3}"),
+    ZH_HANT("等待中：{0}   已檢查：{1}/{2}   已比對：{3}"),
+    KO("대기 중: {0}   확인됨: {1}/{2}   대응됨: {3}"),
+    DE("Wartet: {0}   Geprüft: {1}/{2}   Zugeordnet: {3}"),
+    FR("En attente : {0}   Vérifiées : {1}/{2}   Appariées : {3}"),
+    ES("En espera: {0}   Comprobados: {1}/{2}   Emparejados: {3}"),
+    PT("Em espera: {0}   Verificados: {1}/{2}   Pareados: {3}"),
+    IT("In attesa: {0}   Verificate: {1}/{2}   Confrontate: {3}"),
+    NL("Wacht: {0}   Gecontroleerd: {1}/{2}   Gekoppeld: {3}"),
+    RU("В очереди: {0}   Проверено: {1}/{2}   Сопоставлено: {3}"),
+    TR("Bekliyor: {0}   Denetlendi: {1}/{2}   Eşleşti: {3}"));
+
+SS_MSG(matrix_phase_round,
+    EN("Phase: pair expansion, round {0}"),
+    JA("段階: ペア拡張、ラウンド {0}"),
+    ZH_HANS("阶段：像对扩展，第 {0} 轮"),
+    ZH_HANT("階段：影像對擴展，第 {0} 輪"),
+    KO("단계: 쌍 확장, {0}번째 차례"),
+    DE("Phase: Paarerweiterung, Runde {0}"),
+    FR("Phase : extension des paires, tour {0}"),
+    ES("Fase: expansión de pares, ronda {0}"),
+    PT("Fase: expansão de pares, rodada {0}"),
+    IT("Fase: espansione delle coppie, giro {0}"),
+    NL("Fase: paaruitbreiding, ronde {0}"),
+    RU("Этап: расширение пар, раунд {0}"),
+    TR("Aşama: çift genişletme, tur {0}"));
+
+SS_MSG(matrix_cell_round,
+    EN("Pair expansion, round {0}"),
+    JA("ペア拡張、ラウンド {0}"),
+    ZH_HANS("像对扩展，第 {0} 轮"),
+    ZH_HANT("影像對擴展，第 {0} 輪"),
+    KO("쌍 확장, {0}번째 차례"),
+    DE("Paarerweiterung, Runde {0}"),
+    FR("Extension des paires, tour {0}"),
+    ES("Expansión de pares, ronda {0}"),
+    PT("Expansão de pares, rodada {0}"),
+    IT("Espansione delle coppie, giro {0}"),
+    NL("Paaruitbreiding, ronde {0}"),
+    RU("Расширение пар, раунд {0}"),
+    TR("Çift genişletme, tur {0}"));
+
 SS_MSG(matrix_key_skipped,
     EN("Not paired"),
     JA("組み合わせ対象外"),
@@ -7524,6 +7614,109 @@ SS_MSG(mapper_schedule_help,
        "görüntü görüntü büyütür ve her çekim için varsayılandır. Aşağıdan "
        "yukarı plan görünüm çizgesini küçük öbeklere böler, her birini ayrı "
        "yeniden oluşturur ve yukarı doğru birleştirir."));
+
+SS_MSG(pair_expansion,
+    EN("Expand around matched pairs"),
+    JA("マッチしたペアの周りへ広げる"),
+    ZH_HANS("围绕已匹配的像对扩展"),
+    ZH_HANT("圍繞已比對的影像對擴展"),
+    KO("매칭된 쌍 주변으로 확장"),
+    DE("Um zugeordnete Paare erweitern"),
+    FR("Étendre autour des paires appariées"),
+    ES("Expandir alrededor de los pares emparejados"),
+    PT("Expandir em torno dos pares pareados"),
+    IT("Espandere attorno alle coppie abbinate"),
+    NL("Uitbreiden rond gekoppelde paren"),
+    RU("Расширять вокруг сопоставленных пар"),
+    TR("Eşleşen çiftlerin çevresine genişlet"));
+
+SS_MSG(pair_expansion_help,
+    EN("After the pairs GPU pre-selection chose are verified, every pair that "
+       "matched well also has its neighbours one image away in file order "
+       "matched -- 10 and 15 lead to 9 and 15, 11 and 15, 10 and 14, 10 and 16 "
+       "-- and so on from whatever of those matches, until a round finds "
+       "nothing new. It fills in links the pre-selection ranked just too low, "
+       "at the cost of extra matching. The match map starts over for each "
+       "round and shows the earlier ones pale."),
+    JA("GPU 事前選択が選んだペアを検証したあと、よくマッチしたペアごとに、"
+       "ファイル順で一枚隣の組み合わせもマッチングします（10 と 15 なら 9 と 15、"
+       "11 と 15、10 と 14、10 と 16）。そこでマッチしたものからさらに同じことを"
+       "繰り返し、新しいものが見つからなくなると終わります。事前選択がわずかに"
+       "低く評価したつながりを補いますが、マッチングは増えます。マッチマップは"
+       "ラウンドごとに描き直され、前のラウンドは淡い色で表示されます。"),
+    ZH_HANS("GPU 预筛选选出的像对验证之后，每个匹配良好的像对还会匹配文件顺序上"
+            "相差一张图像的相邻组合——10 和 15 会带出 9 和 15、11 和 15、10 和 14、"
+            "10 和 16——再从其中匹配成功的继续，直到某一轮没有新发现为止。它补上"
+            "预筛选评分略低的连接，代价是额外的匹配；匹配图每一轮都会重新绘制，"
+            "之前的轮次以浅色显示。"),
+    ZH_HANT("GPU 預篩選選出的影像對驗證之後，每個比對良好的影像對還會比對檔案順序上"
+            "相差一張影像的相鄰組合——10 和 15 會帶出 9 和 15、11 和 15、10 和 14、"
+            "10 和 16——再從其中比對成功的繼續，直到某一輪沒有新發現為止。它補上"
+            "預篩選評分略低的連結，代價是額外的比對；比對圖每一輪都會重新繪製，"
+            "先前的輪次以淺色顯示。"),
+    KO("GPU 사전 선택이 고른 쌍을 검증한 뒤, 잘 매칭된 쌍마다 파일 순서로 한 장 "
+       "옆의 조합도 매칭합니다(10과 15라면 9와 15, 11과 15, 10과 14, 10과 16). "
+       "그중 매칭된 것에서 다시 같은 일을 반복해, 새로 찾은 것이 없는 차례가 오면 "
+       "끝납니다. 사전 선택이 조금 낮게 매긴 연결을 채워 주지만 매칭이 늘어납니다. "
+       "매칭 지도는 차례마다 새로 그려지고, 이전 차례는 옅은 색으로 표시됩니다."),
+    DE("Nachdem die von der GPU-Vorauswahl gewählten Paare geprüft sind, werden "
+       "zu jedem gut zugeordneten Paar auch die in Dateireihenfolge um ein Bild "
+       "versetzten Nachbarn zugeordnet -- aus 10 und 15 werden 9 und 15, 11 und "
+       "15, 10 und 14, 10 und 16 -- und so weiter von dem, was davon passt, bis "
+       "eine Runde nichts Neues findet. Das ergänzt Verbindungen, die die "
+       "Vorauswahl knapp zu niedrig bewertet hat, kostet aber zusätzliches "
+       "Zuordnen; die Zuordnungskarte beginnt mit jeder Runde neu und zeigt die "
+       "früheren blass."),
+    FR("Une fois vérifiées les paires choisies par la présélection GPU, chaque "
+       "paire bien appariée voit aussi apparier ses voisines décalées d'une image "
+       "dans l'ordre des fichiers -- 10 et 15 donnent 9 et 15, 11 et 15, 10 et "
+       "14, 10 et 16 -- et ainsi de suite à partir de celles qui correspondent, "
+       "jusqu'à ce qu'un tour ne trouve rien de nouveau. Cela comble les liens "
+       "que la présélection a notés un peu trop bas, au prix d'appariements "
+       "supplémentaires ; la carte des appariements repart de zéro à chaque "
+       "tour et montre les précédents en pâle."),
+    ES("Una vez verificados los pares que eligió la preselección por GPU, a cada "
+       "par bien emparejado se le emparejan también sus vecinos desplazados una "
+       "imagen en el orden de archivos -- 10 y 15 dan 9 y 15, 11 y 15, 10 y 14, "
+       "10 y 16 -- y así sucesivamente desde los que coincidan, hasta que una "
+       "ronda no encuentre nada nuevo. Completa vínculos que la preselección "
+       "puntuó algo bajo, a costa de emparejar más; el mapa de emparejamientos "
+       "empieza de nuevo en cada ronda y muestra las anteriores en tono pálido."),
+    PT("Depois de verificados os pares escolhidos pela pré-seleção por GPU, cada "
+       "par bem pareado tem também seus vizinhos deslocados uma imagem na ordem "
+       "dos arquivos comparados -- 10 e 15 levam a 9 e 15, 11 e 15, 10 e 14, 10 "
+       "e 16 -- e assim por diante a partir dos que corresponderem, até que uma "
+       "rodada não encontre nada novo. Isso preenche vínculos que a pré-seleção "
+       "pontuou um pouco baixo, ao custo de mais comparações; o mapa de "
+       "pareamentos recomeça a cada rodada e mostra as anteriores em tom claro."),
+    IT("Dopo la verifica delle coppie scelte dalla preselezione su GPU, per ogni "
+       "coppia ben abbinata si abbinano anche i vicini spostati di un'immagine "
+       "nell'ordine dei file -- 10 e 15 portano a 9 e 15, 11 e 15, 10 e 14, 10 e "
+       "16 -- e così via da quelli che corrispondono, finché un giro non trova "
+       "nulla di nuovo. Colma legami che la preselezione ha valutato appena "
+       "troppo poco, al prezzo di altri confronti; la mappa dei confronti riparte "
+       "a ogni giro e mostra i precedenti in tinta pallida."),
+    NL("Nadat de paren die de GPU-voorselectie koos geverifieerd zijn, worden "
+       "bij elk goed gekoppeld paar ook de buren één beeld verder in "
+       "bestandsvolgorde gematcht -- 10 en 15 leiden tot 9 en 15, 11 en 15, 10 "
+       "en 14, 10 en 16 -- en zo verder vanuit wat daarvan klopt, tot een ronde "
+       "niets nieuws vindt. Dat vult verbindingen aan die de voorselectie net te "
+       "laag scoorde, ten koste van extra matchen; de koppelingskaart begint elke "
+       "ronde opnieuw en toont de eerdere bleek."),
+    RU("После проверки пар, выбранных предварительным отбором на GPU, для каждой "
+       "хорошо сопоставленной пары сопоставляются и соседи, сдвинутые на одно "
+       "изображение в порядке файлов (10 и 15 дают 9 и 15, 11 и 15, 10 и 14, "
+       "10 и 16), и так далее от тех, что совпали, пока раунд не перестанет "
+       "находить новое. Это восполняет связи, которые отбор оценил чуть ниже "
+       "порога, ценой дополнительных сопоставлений; карта сопоставлений "
+       "начинается заново в каждом раунде, а прежние показывает бледными."),
+    TR("GPU ön seçiminin seçtiği çiftler doğrulandıktan sonra, iyi eşleşen her "
+       "çiftin dosya sırasında bir görüntü kaydırılmış komşuları da eşleştirilir "
+       "-- 10 ile 15; 9 ile 15, 11 ile 15, 10 ile 14 ve 10 ile 16'yı getirir -- "
+       "ve bunlardan eşleşenlerden devam edilir, ta ki bir tur yeni bir şey "
+       "bulamayana kadar. Ön seçimin biraz düşük puanladığı bağlantıları "
+       "tamamlar, bedeli ek eşleştirmedir; eşleşme haritası her turda "
+       "yeniden başlar ve öncekileri soluk gösterir."));
 
 SS_MSG(prefilter_sequential,
     EN("Also match neighbouring frames"),

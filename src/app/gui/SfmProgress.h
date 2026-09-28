@@ -41,6 +41,11 @@ struct PairMatrix {
     // holds the pairs that survived and nothing about the rest), which is what
     // `staged()` asks before a cell is drawn as pending or as filtered out.
     std::vector<uint32_t> planned, verified;
+    // The pair-expansion round that first made a cell a candidate, 0 for the
+    // initial list; empty from a writer that predates expansion.
+    std::vector<uint32_t> stage;
+    // The phase being verified and its pair totals, exact however binned.
+    uint32_t phase = 0, phase_planned = 0, phase_verified = 0, phase_matched = 0;
     uint32_t peak = 0;
     bool empty() const { return bins == 0 || counts.empty(); }
     bool staged() const { return planned.size() == counts.size(); }

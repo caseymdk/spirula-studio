@@ -331,6 +331,140 @@ SS_MSG(prefilter_sequential_help,
        "--quadratic-overlap); içerik puanının fazla düşük sıraladığı gerçek bir "
        "bağ kaybolmaz"));
 
+SS_MSG(pair_expansion_help,
+    EN("After GPU pair selection's pairs are verified, also match the neighbours "
+       "one image away in file order of every pair that verified, then theirs, "
+       "until a round finds no new link"),
+    JA("GPU のペア選択で選ばれたペアを検証したあと、検証に通った各ペアについて"
+       "ファイル順で一枚隣の画像との組み合わせもマッチングし、新しいつながりが"
+       "見つからなくなるまでそれを繰り返します"),
+    ZH_HANS("GPU 像对筛选选出的像对验证之后，对每个通过验证的像对，再匹配文件顺序上"
+            "相差一张图像的相邻组合，并依此继续，直到某一轮没有找到新的连接"),
+    ZH_HANT("GPU 影像對篩選選出的影像對驗證之後，對每個通過驗證的影像對，再比對檔案"
+            "順序上相差一張影像的相鄰組合，並依此繼續，直到某一輪沒有找到新的連結"),
+    KO("GPU 쌍 선택으로 고른 쌍을 검증한 뒤, 검증을 통과한 각 쌍에 대해 파일 순서로 "
+       "한 장 옆의 조합도 매칭하고, 새 연결이 없는 차례가 올 때까지 이를 "
+       "반복합니다"),
+    DE("Nachdem die Paare der GPU-Paarauswahl geprüft sind, auch die in "
+       "Dateireihenfolge um ein Bild versetzten Nachbarn jedes bestandenen Paares "
+       "zuordnen, dann deren Nachbarn, bis eine Runde keine neue Verbindung "
+       "findet"),
+    FR("Une fois vérifiées les paires de la sélection GPU, apparier aussi les "
+       "voisines décalées d'une image dans l'ordre des fichiers de chaque paire "
+       "vérifiée, puis les leurs, jusqu'à ce qu'un tour ne trouve aucun nouveau "
+       "lien"),
+    ES("Una vez verificados los pares de la selección por GPU, emparejar también "
+       "los vecinos desplazados una imagen en el orden de archivos de cada par "
+       "verificado, y luego los de estos, hasta que una ronda no encuentre ningún "
+       "vínculo nuevo"),
+    PT("Depois de verificados os pares da seleção por GPU, emparelhar também os "
+       "vizinhos deslocados uma imagem na ordem dos arquivos de cada par "
+       "verificado, e depois os deles, até que uma rodada não encontre nenhum "
+       "vínculo novo"),
+    IT("Dopo la verifica delle coppie della selezione su GPU, abbinare anche i "
+       "vicini spostati di un'immagine nell'ordine dei file di ogni coppia "
+       "verificata, poi i loro, finché un giro non trova alcun nuovo legame"),
+    NL("Nadat de paren van de GPU-paarselectie geverifieerd zijn, ook de buren "
+       "één beeld verder in bestandsvolgorde van elk geverifieerd paar matchen, "
+       "en daarna die van hen, tot een ronde geen nieuwe verbinding vindt"),
+    RU("После проверки пар, отобранных на GPU, сопоставлять также соседей, "
+       "сдвинутых на одно изображение в порядке файлов, для каждой прошедшей "
+       "проверку пары, затем их соседей, пока очередной раунд не найдёт новых "
+       "связей"),
+    TR("GPU çift seçiminin çiftleri doğrulandıktan sonra, doğrulanan her çiftin "
+       "dosya sırasında bir görüntü kaydırılmış komşularını, sonra onlarınkini de "
+       "eşleştir; bir tur yeni bağlantı bulamayana kadar"));
+
+SS_MSG(pair_expansion_min_inliers_help,
+    EN("Inliers a verified pair needs before --pair-expansion matches its "
+       "neighbours"),
+    JA("--pair-expansion が隣の組み合わせをマッチングする前に、検証済みペアに"
+       "必要なインライア数"),
+    ZH_HANS("--pair-expansion 匹配相邻组合之前，已验证像对需要的内点数"),
+    ZH_HANT("--pair-expansion 比對相鄰組合之前，已驗證影像對需要的內點數"),
+    KO("--pair-expansion 이 이웃 조합을 매칭하기 전에 검증된 쌍에 필요한 내부점 수"),
+    DE("Inlier, die ein geprüftes Paar braucht, bevor --pair-expansion seine "
+       "Nachbarn zuordnet"),
+    FR("Inliers qu'une paire vérifiée doit avoir avant que --pair-expansion "
+       "apparie ses voisines"),
+    ES("Inliers que necesita un par verificado antes de que --pair-expansion "
+       "empareje a sus vecinos"),
+    PT("Inliers de que um par verificado precisa antes que --pair-expansion "
+       "emparelhe seus vizinhos"),
+    IT("Inlier di cui una coppia verificata ha bisogno prima che "
+       "--pair-expansion abbini i suoi vicini"),
+    NL("Inliers die een geverifieerd paar nodig heeft voordat --pair-expansion "
+       "zijn buren matcht"),
+    RU("Сколько инлайеров нужно проверенной паре, чтобы --pair-expansion "
+       "сопоставил её соседей"),
+    TR("--pair-expansion'ın komşularını eşleştirmesinden önce doğrulanmış bir "
+       "çiftin gereken içleyen sayısı"));
+
+SS_MSG(pair_expansion_rounds_help,
+    EN("Most rounds --pair-expansion runs; 0 goes on until a round finds no new "
+       "link"),
+    JA("--pair-expansion の最大ラウンド数。0 なら新しいつながりが見つからなくなる"
+       "まで続けます"),
+    ZH_HANS("--pair-expansion 最多运行的轮数；0 表示一直进行，直到某一轮没有新连接"),
+    ZH_HANT("--pair-expansion 最多執行的輪數；0 表示一直進行，直到某一輪沒有新連結"),
+    KO("--pair-expansion 이 도는 최대 차례 수. 0 이면 새 연결이 없는 차례까지 "
+       "계속합니다"),
+    DE("Höchstzahl der Runden von --pair-expansion; 0 läuft, bis eine Runde "
+       "keine neue Verbindung findet"),
+    FR("Nombre maximal de tours de --pair-expansion ; 0 continue jusqu'à ce "
+       "qu'un tour ne trouve aucun nouveau lien"),
+    ES("Máximo de rondas de --pair-expansion; 0 sigue hasta que una ronda no "
+       "encuentre ningún vínculo nuevo"),
+    PT("Máximo de rodadas de --pair-expansion; 0 continua até que uma rodada "
+       "não encontre nenhum vínculo novo"),
+    IT("Numero massimo di giri di --pair-expansion; 0 continua finché un giro "
+       "non trova alcun nuovo legame"),
+    NL("Maximaal aantal rondes van --pair-expansion; 0 gaat door tot een ronde "
+       "geen nieuwe verbinding vindt"),
+    RU("Наибольшее число раундов --pair-expansion; 0 продолжает, пока раунд не "
+       "перестанет находить новые связи"),
+    TR("--pair-expansion'ın en fazla tur sayısı; 0, bir tur yeni bağlantı "
+       "bulamayana kadar sürer"));
+
+SS_MSG(pair_expansion_max_rotation_help,
+    EN("Degrees a pair --pair-expansion found may disagree with the rotation "
+       "through the seed and neighbour pair that reached it before it is thrown "
+       "out; 0 keeps every verified pair"),
+    JA("--pair-expansion が見つけたペアの回転が、そこへ至った起点ペアと隣のペアを"
+       "経由した回転と食い違ってよい角度（度）。これを超えると除外します。0 なら"
+       "検証済みのペアをすべて残します"),
+    ZH_HANS("--pair-expansion 找到的像对，其旋转与经由起点像对和相邻像对推得的旋转"
+            "允许相差的角度（度），超过即剔除；0 表示保留所有通过验证的像对"),
+    ZH_HANT("--pair-expansion 找到的影像對，其旋轉與經由起點影像對和相鄰影像對推得的"
+            "旋轉允許相差的角度（度），超過即剔除；0 表示保留所有通過驗證的影像對"),
+    KO("--pair-expansion 이 찾은 쌍의 회전이 그곳에 이른 시작 쌍과 이웃 쌍을 거친 "
+       "회전과 어긋나도 되는 각도(도). 넘으면 제외합니다. 0 이면 검증된 쌍을 모두 "
+       "남깁니다"),
+    DE("Grad, um die ein von --pair-expansion gefundenes Paar von der Rotation "
+       "über das Ausgangspaar und das Nachbarpaar abweichen darf, bevor es "
+       "verworfen wird; 0 behält jedes geprüfte Paar"),
+    FR("Degrés dont une paire trouvée par --pair-expansion peut s'écarter de la "
+       "rotation passant par la paire de départ et la paire voisine avant d'être "
+       "rejetée ; 0 garde toute paire vérifiée"),
+    ES("Grados que un par hallado por --pair-expansion puede diferir de la "
+       "rotación a través del par de partida y el par vecino antes de "
+       "descartarlo; 0 conserva todo par verificado"),
+    PT("Graus que um par achado por --pair-expansion pode divergir da rotação "
+       "através do par de partida e do par vizinho antes de ser descartado; 0 "
+       "mantém todo par verificado"),
+    IT("Gradi di cui una coppia trovata da --pair-expansion può discostarsi "
+       "dalla rotazione attraverso la coppia di partenza e quella vicina prima "
+       "di essere scartata; 0 tiene ogni coppia verificata"),
+    NL("Graden die een door --pair-expansion gevonden paar mag afwijken van de "
+       "rotatie via het startpaar en het buurpaar voordat het wordt verworpen; "
+       "0 houdt elk geverifieerd paar"),
+    RU("На сколько градусов поворот пары, найденной --pair-expansion, может "
+       "расходиться с поворотом через исходную и соседнюю пары, прежде чем её "
+       "отбросят; 0 оставляет все проверенные пары"),
+    TR("--pair-expansion'ın bulduğu bir çiftin dönüşünün, başlangıç çifti ve "
+       "komşu çift üzerinden gelen dönüşten atılmadan önce sapabileceği derece; "
+       "0 doğrulanan her çifti tutar"));
+
 SS_MSG(rig_pairs_help,
     EN("On a dual-fisheye rig, match each verified pair's rig-mates too: when "
        "cam0 of two frames matched, cam1 of the same two frames; when cam0 "

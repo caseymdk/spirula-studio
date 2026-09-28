@@ -58,7 +58,8 @@ images/ ──► extract ──► features/ ─┐
 `--progress-dir DIR` adds a second, optional output: `model.bin` (the poses and
 a subsample of the points as they stand, coloured) and `pairs.bin` (per binned
 image pair: the inliers, how many pairs were candidates and how many have been
-verified, so a front end can tell "not reached yet" from "found nothing"),
+verified, so a front end can tell "not reached yet" from "found nothing", and
+the pair-expansion round that first made the cell a candidate),
 rewritten at most every 1.5 s and renamed into place so a reader never sees
 half of one. It is off unless asked for, and it exists so a
 front end can show a run rather than tail it — the GUI passes it to its own
@@ -666,6 +667,30 @@ extracted in lockstep, starts a `.360`'s views at the rotations it cut them at
 (the views of one lens sharing its centre), and offers
 it for two photo folders on one rig. `docs/notes/sfm-rig-constraints.md`,
 "Known lens geometry", has the measurements.
+
+**Pair expansion.** Pair selection keeps each image's top-k partners by a
+subsampled score, so a real link right beside one it found can rank just below
+the cut. With `--pair-expansion` (on, whenever pair selection ran: `--pairs
+prefilter`, `auto` from 100 images, or sequential loop closure), every verified
+pair with at least `--pair-expansion-min-inliers` (30) inliers has its four
+one-step neighbours matched -- (i-1, j), (i+1, j), (i, j-1), (i, j+1), each
+image kept inside its own folder -- and the ones of those that clear the bar
+seed the next round, until a round adds nothing or `--pair-expansion-rounds`
+(0: no limit) is reached. A verified candidate is kept only if it closes a triangle: (i-1, j) came
+from seed (i, j) through the neighbour pair (i-1, i), so its rotation must agree
+with those two composed, within `--pair-expansion-max-rotation` (5 degrees; 0
+turns the test off). Rotations come from each pair's inliers -- the essential
+matrix, or the best pure rotation where that explains 80% of them. On a
+1872-frame walk mapped without its frame order, 57% of the pairs expansion
+verified contradicted the reconstruction (repeated structure passes two-view
+RANSAC), and they moved a 110-frame section of the model; the test exists for
+that. A pair is offered once, ever; the rig-mate pass below
+runs after it and skips everything already tried. Each round is its own
+verification pass and is journalled like the first, so a resumed run re-derives
+the same rounds and verifies only what is missing. The match map starts over
+for each round, in the ordinary colours, with every earlier round's pairs pale
+green or pale red, and names the round under it with its pairs waiting, checked
+and matched (`pairs.bin` version 3 ends with those totals).
 
 **Rig-mates in matching.** On a `dual-fisheye` rig, `--rig-pairs` (on)
 extends every pair of two frames that verified with at least

@@ -99,6 +99,15 @@ struct SfmConfig {
     // window, so a link the content score ranked just out of an image's top-k
     // is still matched when the file order says the two are neighbours.
     bool prefilter_sequential = false;
+    // After pair selection's pairs are verified, match the one-step
+    // neighbours of each pair with at least pair_expansion_min_inliers, and
+    // theirs, until a round finds none (0 rounds = no limit).
+    bool pair_expansion = true;
+    int pair_expansion_min_inliers = 30;
+    int pair_expansion_rounds = 0;
+    // A candidate is kept only if its rotation closes a triangle with the seed
+    // and neighbour pair that reached it, within this many degrees (0: no test).
+    double pair_expansion_max_rotation = 5.0;
     // Match the rig-mates of every chosen pair of two rig frames, by what the
     // members' known rotations say faces what (sfm/feature/RigPairs.h).
     bool rig_pairs = true;
@@ -324,6 +333,14 @@ struct SfmConfig {
       0, "", quadratic_overlap)                                                                    \
     F(prefilter_sequential, "prefilter-sequential", CMD_AUTO | CMD_MATCH, Tier::Advanced,          \
       "pipeline", 0, 0, "", prefilter_sequential)                                                  \
+    F(pair_expansion, "pair-expansion", CMD_AUTO | CMD_MATCH, Tier::Advanced, "pipeline", 0, 0,    \
+      "", pair_expansion)                                                                          \
+    F(pair_expansion_min_inliers, "pair-expansion-min-inliers", CMD_AUTO | CMD_MATCH,              \
+      Tier::Advanced, "pipeline", 0, 100000, "", pair_expansion_min_inliers)                       \
+    F(pair_expansion_rounds, "pair-expansion-rounds", CMD_AUTO | CMD_MATCH, Tier::Advanced,        \
+      "pipeline", 0, 100000, "", pair_expansion_rounds)                                            \
+    F(pair_expansion_max_rotation, "pair-expansion-max-rotation", CMD_AUTO | CMD_MATCH,            \
+      Tier::Advanced, "pipeline", 0, 180, "", pair_expansion_max_rotation)                         \
     F(rig_pairs, "rig-pairs", CMD_AUTO | CMD_MATCH, Tier::Advanced, "pipeline", 0, 0, "",          \
       rig_pairs)                                                                                   \
     F(rig_pair_angle, "rig-pair-angle", CMD_AUTO | CMD_MATCH, Tier::Advanced, "pipeline", 0, 180,  \

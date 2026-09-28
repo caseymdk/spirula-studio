@@ -375,7 +375,8 @@ bool read_pair_matrix(const std::string& dir, int64_t& mtime, PairMatrix& out) {
     const std::string b = slurp_if_newer(fs::path(dir) / "pairs.bin", mtime);
     if (b.size() < 16 || std::memcmp(b.data(), "VKPP", 4) != 0) return false;
     Reader r{b.data() + 4, b.data() + b.size()};
-    if (r.u32() != 2) return false;
+    const uint32_t version = r.u32();
+    if (version != 2 && version != 3) return false;
     PairMatrix m;
     m.n_images = r.u32();
     m.bins = r.u32();
@@ -387,6 +388,15 @@ bool read_pair_matrix(const std::string& dir, int64_t& mtime, PairMatrix& out) {
     if (!r.take(m.counts.data(), n * 4)) return false;
     if (!r.take(m.planned.data(), n * 4)) return false;
     if (!r.take(m.verified.data(), n * 4)) return false;
+    if (version >= 3) {
+        m.stage.resize(n);
+        if (!r.take(m.stage.data(), n * 4)) return false;
+        m.phase = r.u32();
+        m.phase_planned = r.u32();
+        m.phase_verified = r.u32();
+        m.phase_matched = r.u32();
+        if (!r.ok) return false;
+    }
     note_peak(m);
     out = std::move(m);
     return true;

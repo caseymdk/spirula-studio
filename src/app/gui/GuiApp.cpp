@@ -6058,6 +6058,13 @@ void GuiApp::draw_sfm_advanced() {
         ui::Checkbox(dmsg::prefilter_sequential, &_sfm_job.prefilter_sequential);
         ui::help_on_hover(dmsg::prefilter_sequential_help);
     }
+    // Wherever pair selection can run: its own mode, "Automatic", or the
+    // loop closure a sequential run adds.
+    if (_sfm_job.pairs == 0 || _sfm_job.pairs == 3 ||
+        (_sfm_job.pairs == 2 && _sfm_job.loop_closure)) {
+        ui::Checkbox(dmsg::pair_expansion, &_sfm_job.pair_expansion);
+        ui::help_on_hover(dmsg::pair_expansion_help);
+    }
     ui::Checkbox(dmsg::use_sequence, &_sfm_job.use_sequence);
     ui::help_on_hover(dmsg::use_sequence_help);
     if (sequential_window_applies(_sfm_job)) {

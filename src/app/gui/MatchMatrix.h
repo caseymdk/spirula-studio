@@ -36,6 +36,7 @@ private:
     PairMatrix _m;
     GLuint _tex = 0;
     bool _dirty = false;
+    uint32_t _phase = 0;  // pair-expansion round on screen, 0: selection
 };
 
 }  // namespace gui

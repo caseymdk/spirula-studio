@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -62,6 +63,32 @@ inline std::vector<uint32_t> folderRuns(const std::vector<std::string>& names) {
         run[i] = ids.emplace(dir, (uint32_t)ids.size()).first->second;
     }
     return run;
+}
+
+// Pair expansion: the one-step neighbours (i-1, j), (i+1, j), (i, j-1),
+// (i, j+1) of every seed, each image staying inside its own folder, minus
+// what `tried` holds (keys a << 32 | b, a < b). Sorted, a < b, no duplicates.
+inline std::vector<std::pair<uint32_t, uint32_t>> expansionPairs(
+    const std::vector<std::pair<uint32_t, uint32_t>>& seeds, const std::vector<uint32_t>& run,
+    const std::unordered_set<uint64_t>& tried) {
+    const uint32_t n = (uint32_t)run.size();
+    std::vector<std::pair<uint32_t, uint32_t>> out;
+    auto add = [&](uint32_t a, uint32_t b) {
+        if (a >= n || b >= n || a == b) return;
+        if (a > b) std::swap(a, b);
+        if (!tried.count(((uint64_t)a << 32) | b)) out.emplace_back(a, b);
+    };
+    for (const auto& s : seeds) {
+        const uint32_t i = s.first, j = s.second;
+        if (i >= n || j >= n) continue;
+        if (i > 0 && run[i - 1] == run[i]) add(i - 1, j);
+        if (i + 1 < n && run[i + 1] == run[i]) add(i + 1, j);
+        if (j > 0 && run[j - 1] == run[j]) add(i, j - 1);
+        if (j + 1 < n && run[j + 1] == run[j]) add(i, j + 1);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
 }
 
 // The window along each sequence of a SequenceTable, one chain per member so

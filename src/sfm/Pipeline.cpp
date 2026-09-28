@@ -27,6 +27,8 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "core/ColorSpace.h"
@@ -44,6 +46,7 @@
 #include "sfm/core/Manifest.h"
 #include "sfm/core/Mask.h"
 #include "sfm/core/Matches.h"
+#include "sfm/feature/ExpansionCheck.h"
 #include "sfm/feature/Matcher.h"
 #include "sfm/feature/PairSelection.h"
 #include "sfm/feature/Pairing.h"
@@ -1949,6 +1952,155 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
                     db.pairs.push_back(std::move(fresh[n->second]));
             }
         }
+        // Every pair verification has been offered, so no later pass repeats
+        // one: the expansion rounds and the rig-mates below all check this.
+        std::unordered_set<uint64_t> tried;
+        tried.reserve(pairs.size() * 2);
+        for (const auto& p : pairs) tried.insert(resume::pairKey(p.first, p.second));
+        size_t evaluated = pairs.size();
+        // Pair expansion. Selection keeps each image's top-k by a subsampled
+        // score, so a real link beside one it found can sit just below the cut;
+        // the neighbours of what verified are matched until a round adds none.
+        const bool selected = mode == PairMode::Prefilter ||
+                              (mode == PairMode::Sequential && cfg.loop_closure && n_images > 2);
+        // Rotations of verified pairs, for the expansion rounds' triangle test
+        // (sfm/feature/ExpansionCheck.h).
+        const std::vector<uint32_t> run = folderRuns(image_names);
+        const bool rot_check = cfg.pair_expansion_max_rotation > 0 && calib;
+        const std::vector<Camera> cams =
+            rot_check ? perImageCameras(calib->cameras, feats.size()) : std::vector<Camera>();
+        PairRotations rot;
+        std::unordered_map<uint64_t, size_t> db_at;
+        for (size_t i = 0; i < db.pairs.size(); i++)
+            db_at[resume::pairKey(db.pairs[i].image1, db.pairs[i].image2)] = i;
+        auto pairRot = [&](const TwoViewMatches& t, Mat3& R) {
+            const Camera &ci = cams[t.image1], &cj = cams[t.image2];
+            std::vector<Vec3> b1, b2;
+            b1.reserve(t.matches.size());
+            b2.reserve(t.matches.size());
+            for (const FeatureMatch& m : t.matches) {
+                const Keypoint& p = feats[t.image1].keypoints[m.idx1];
+                const Keypoint& q = feats[t.image2].keypoints[m.idx2];
+                b1.push_back(ci.bearing({p.x, p.y}));
+                b2.push_back(cj.bearing({q.x, q.y}));
+            }
+            const double sc =
+                0.5 * (feats[t.image1].pixelScale() + feats[t.image2].pixelScale());
+            const double f = 0.5 * (ci.focal() + cj.focal());
+            return pairRotation(b1, b2, tvopt.ransac.max_error * sc / std::max(1.0, f), R);
+        };
+        auto measureRotations = [&](const std::vector<const TwoViewMatches*>& measure) {
+            std::vector<Mat3> Rs(measure.size());
+            std::vector<char> ok(measure.size(), 0);
+            std::atomic<size_t> next_job{0};
+            auto worker = [&] {
+                for (size_t k; (k = next_job++) < measure.size();) ok[k] = pairRot(*measure[k], Rs[k]);
+            };
+            const unsigned nt = std::max(
+                1u, cfg.threads > 0 ? (unsigned)cfg.threads : std::thread::hardware_concurrency());
+            std::vector<std::thread> pool;
+            for (unsigned w = 1; w < nt; w++) pool.emplace_back(worker);
+            worker();
+            for (std::thread& th : pool) th.join();
+            for (size_t k = 0; k < measure.size(); k++)
+                if (ok[k]) rot.set(measure[k]->image1, measure[k]->image2, Rs[k]);
+        };
+        if (cfg.pair_expansion && selected) {
+            std::vector<std::pair<uint32_t, uint32_t>> seeds;
+            for (const TwoViewMatches& t : db.pairs)
+                if ((int)t.matches.size() >= cfg.pair_expansion_min_inliers)
+                    seeds.emplace_back(t.image1, t.image2);
+            for (uint32_t round = 1;
+                 !seeds.empty() &&
+                 (cfg.pair_expansion_rounds <= 0 || (int)round <= cfg.pair_expansion_rounds);
+                 round++) {
+                const std::vector<std::pair<uint32_t, uint32_t>> cand =
+                    expansionPairs(seeds, run, tried);
+                if (cand.empty()) break;
+                for (const auto& q : cand) tried.insert(resume::pairKey(q.first, q.second));
+                sfm::progress::add_candidates(cand, round);
+                std::vector<std::pair<uint32_t, uint32_t>> cand_todo;
+                for (const auto& q : cand)
+                    if (!done_set.count(resume::pairKey(q.first, q.second))) cand_todo.push_back(q);
+                std::vector<TwoViewMatches> got;
+                if (!cand_todo.empty()) {
+                    auto roundFn = [&](size_t b, size_t e,
+                                       std::vector<std::vector<FeatureMatch>>& mout) {
+                        matcher->matchBatch(feats, cand_todo, b, e, mout);
+                    };
+                    vopt.progress_done_base = evaluated;
+                    vopt.progress_total = evaluated + cand.size();
+                    uint64_t put = 0;
+                    got = verifyPairs(feats, cand_todo, roundFn, vopt, &put, progress, &pstats);
+                    stats.putative += put;
+                }
+                // In the candidates' order whichever run verified each, as for
+                // the main list.
+                std::unordered_map<uint64_t, size_t> at;
+                for (size_t i = 0; i < got.size(); i++)
+                    at[resume::pairKey(got[i].image1, got[i].image2)] = i;
+                std::vector<TwoViewMatches> verified;
+                for (const auto& q : cand) {
+                    const uint64_t key = resume::pairKey(q.first, q.second);
+                    const auto old = done_kept.find(key);
+                    if (old != done_kept.end()) verified.push_back(std::move(old->second));
+                    else if (const auto n = at.find(key); n != at.end())
+                        verified.push_back(std::move(got[n->second]));
+                }
+                // The rotation test (sfm/feature/ExpansionCheck.h): the rotations
+                // every triangle needs, measured in parallel, then each candidate
+                // kept only if one of its triangles closes.
+                std::vector<char> keep(verified.size(), 1);
+                if (rot_check) {
+                    std::unordered_set<uint64_t> seed_keys, queued;
+                    for (const auto& q : seeds) seed_keys.insert(resume::pairKey(q.first, q.second));
+                    std::vector<const TwoViewMatches*> measure;
+                    auto want = [&](uint32_t a, uint32_t b) {
+                        const uint64_t key = resume::pairKey(a, b);
+                        if (rot.has(a, b) || !queued.insert(key).second) return;
+                        if (const auto it = db_at.find(key); it != db_at.end())
+                            measure.push_back(&db.pairs[it->second]);
+                    };
+                    for (const TwoViewMatches& t : verified) {
+                        queued.insert(resume::pairKey(t.image1, t.image2));
+                        measure.push_back(&t);
+                        for (const ExpansionTriangle& tri :
+                             expansionTriangles(t.image1, t.image2, run, seed_keys)) {
+                            want(tri.moved, tri.k);
+                            want(tri.k, tri.fixed);
+                        }
+                    }
+                    measureRotations(measure);
+                    for (size_t k = 0; k < verified.size(); k++)
+                        keep[k] = checkTriangles(verified[k].image1, verified[k].image2, run,
+                                                 seed_keys, rot, cfg.pair_expansion_max_rotation) ==
+                                  TriangleVerdict::Consistent;
+                }
+                // The next round grows from what was kept and cleared the bar.
+                std::vector<std::pair<uint32_t, uint32_t>> next;
+                size_t kept = 0, rejected = 0;
+                for (size_t k = 0; k < verified.size(); k++) {
+                    TwoViewMatches& t = verified[k];
+                    if (!keep[k]) {
+                        sfm::progress::reject(t.image1, t.image2, (uint32_t)t.matches.size());
+                        rejected++;
+                        continue;
+                    }
+                    if ((int)t.matches.size() >= cfg.pair_expansion_min_inliers)
+                        next.emplace_back(t.image1, t.image2);
+                    db_at[resume::pairKey(t.image1, t.image2)] = db.pairs.size();
+                    db.pairs.push_back(std::move(t));
+                    kept++;
+                }
+                evaluated += cand.size();
+                stats.pairs += cand.size();
+                if (verbose)
+                    L::err(Tag::Match, M::match_expansion_round,
+                           {(long long)round, (long long)kept, (long long)cand.size(),
+                            (long long)seeds.size(), (long long)rejected});
+                seeds.swap(next);
+            }
+        }
         // Rig-mates, as a second pass over what verified: only a link the
         // images confirmed is extended to the other lenses (on a PortalCam
         // walk, three in four mates of unverified shortlist pairs failed).
@@ -1965,8 +2117,8 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
             }
             mates.erase(std::remove_if(mates.begin(), mates.end(),
                                        [&](const std::pair<uint32_t, uint32_t>& q) {
-                                           return std::binary_search(pairs.begin(),
-                                                                     pairs.end(), q);
+                                           return tried.count(
+                                               resume::pairKey(q.first, q.second)) != 0;
                                        }),
                         mates.end());
             std::vector<std::pair<uint32_t, uint32_t>> mates_todo;
@@ -1978,8 +2130,8 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
                                   std::vector<std::vector<FeatureMatch>>& mout) {
                     matcher->matchBatch(feats, mates_todo, b, e, mout);
                 };
-                vopt.progress_done_base = pairs.size();
-                vopt.progress_total = pairs.size() + mates_todo.size();
+                vopt.progress_done_base = evaluated;
+                vopt.progress_total = evaluated + mates_todo.size();
                 uint64_t put2 = 0;
                 more = verifyPairs(feats, mates_todo, mateFn, vopt, &put2, progress, &pstats);
                 stats.putative += put2;

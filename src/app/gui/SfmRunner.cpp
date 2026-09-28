@@ -251,6 +251,7 @@ void SfmRunner::take_reconstruction(SfmJob& job) {
     job.overlap = _live.overlap;
     job.loop_closure = _live.loop_closure;
     job.prefilter_sequential = _live.prefilter_sequential;
+    job.pair_expansion = _live.pair_expansion;
     job.use_sequence = _live.use_sequence;
     job.init_focal_px = _live.init_focal_px;
     job.init_distortion = _live.init_distortion;
@@ -709,6 +710,7 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
     // is a no-op under the other pair modes.
     if (!job.loop_closure) argv.push_back("--no-loop-closure");
     if (!job.prefilter_sequential) argv.push_back("--no-prefilter-sequential");
+    if (!job.pair_expansion) argv.push_back("--no-pair-expansion");
     if (job.init_focal_px > 0) {
         char buf[32];
         std::snprintf(buf, sizeof buf, "%g", job.init_focal_px);

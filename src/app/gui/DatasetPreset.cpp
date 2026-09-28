@@ -81,6 +81,7 @@ namespace {
     X("sfm_overlap",                sfm.overlap)                              \
     X("sfm_loop_closure",           sfm.loop_closure)                         \
     X("sfm_prefilter_sequential",   sfm.prefilter_sequential)                 \
+    X("sfm_pair_expansion",         sfm.pair_expansion)                       \
     X("sfm_use_sequence",           sfm.use_sequence)                         \
     X("sfm_init_focal_px",          sfm.init_focal_px)                        \
     X("sfm_init_distortion",        sfm.init_distortion)                      \

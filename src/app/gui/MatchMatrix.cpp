@@ -16,25 +16,41 @@ namespace gui {
 
 namespace {
 
-// What a cell says about its block of pairs. Everything but Matched is a
-// colour of its own: "nothing has reached this yet" and "this was tried and
-// found nothing" are opposite answers, and a matrix that draws both black
-// reads as a failure while matching is still on its first row.
-enum class Cell { Filtered, Pending, NoMatch, Matched };
+// "Not reached yet" and "tried, found nothing" are opposite answers, so each
+// state has its own colour. Each pair-expansion round starts the map over: its
+// pairs take the ordinary colours, and earlier phases' go pale.
+enum class Cell { Filtered, Pending, NoMatch, Matched, EarlierNoMatch, EarlierMatched };
 
-constexpr ImU32 kFilteredCol = IM_COL32(18, 19, 24, 255);
-constexpr ImU32 kPendingCol  = IM_COL32(92, 74, 30, 255);
-constexpr ImU32 kNoMatchCol  = IM_COL32(104, 30, 34, 255);
+constexpr ImU32 kFilteredCol       = IM_COL32(18, 19, 24, 255);
+constexpr ImU32 kPendingCol        = IM_COL32(215, 160, 40, 255);
+constexpr ImU32 kNoMatchCol        = IM_COL32(200, 40, 45, 255);
 // The top of the inlier ramp, for the legend swatch.
-constexpr ImU32 kMatchedCol  = IM_COL32(160, 230, 255, 255);
+constexpr ImU32 kMatchedCol        = IM_COL32(160, 230, 255, 255);
+constexpr ImU32 kEarlierMatchedCol = IM_COL32(205, 240, 205, 255);
+constexpr ImU32 kEarlierNoMatchCol = IM_COL32(245, 205, 205, 255);
 
-Cell cell_state(const PairMatrix& m, size_t i) {
-    if (m.counts[i]) return Cell::Matched;
+uint32_t cell_round(const PairMatrix& m, size_t i) {
+    return i < m.stage.size() ? m.stage[i] : 0;
+}
+
+Cell cell_state(const PairMatrix& m, size_t i, uint32_t phase) {
     // A finished matches.bin lists the pairs that survived and nothing about
     // the rest, so there is no pending state to tell apart from a filtered one.
-    if (!m.staged()) return Cell::Filtered;
-    if (!m.planned[i]) return Cell::Filtered;
+    if (!m.staged()) return m.counts[i] ? Cell::Matched : Cell::Filtered;
+    if (!m.planned[i]) return m.counts[i] ? Cell::Matched : Cell::Filtered;
+    if (cell_round(m, i) < phase)
+        return m.counts[i] ? Cell::EarlierMatched : Cell::EarlierNoMatch;
+    if (m.counts[i]) return Cell::Matched;
     return m.verified[i] ? Cell::NoMatch : Cell::Pending;
+}
+
+// The latest pair-expansion round any cell came from, 0 before the first.
+uint32_t current_phase(const PairMatrix& m) {
+    uint32_t phase = 0;
+    if (!m.staged()) return 0;
+    for (size_t i = 0; i < m.stage.size(); i++)
+        if (m.planned[i]) phase = std::max(phase, m.stage[i]);
+    return phase;
 }
 
 void legend_swatch(ImU32 col, const spirula::i18n::Msg& label) {
@@ -54,11 +70,13 @@ MatchMatrix::~MatchMatrix() = default;
 
 void MatchMatrix::set(const PairMatrix& m) {
     _m = m;
+    _phase = current_phase(_m);
     _dirty = true;
 }
 
 void MatchMatrix::clear() {
     _m = PairMatrix{};
+    _phase = 0;
     _dirty = true;
 }
 
@@ -71,22 +89,25 @@ bool MatchMatrix::draw(float size, PairBlock& block) {
         const float top = std::log1p((float)_m.peak);
         std::vector<uint8_t> px((size_t)_m.bins * _m.bins * 3);
         for (size_t i = 0; i < (size_t)_m.bins * _m.bins; i++) {
-            const Cell state = cell_state(_m, i);
+            const Cell state = cell_state(_m, i, _phase);
             if (state != Cell::Matched) {
-                const ImU32 flat = state == Cell::Filtered ? kFilteredCol
-                                 : state == Cell::Pending  ? kPendingCol
-                                                           : kNoMatchCol;
+                const ImU32 flat = state == Cell::Filtered       ? kFilteredCol
+                                 : state == Cell::Pending        ? kPendingCol
+                                 : state == Cell::NoMatch        ? kNoMatchCol
+                                 : state == Cell::EarlierMatched ? kEarlierMatchedCol
+                                                                 : kEarlierNoMatchCol;
                 px[i * 3 + 0] = (uint8_t)(flat & 0xff);
                 px[i * 3 + 1] = (uint8_t)((flat >> 8) & 0xff);
                 px[i * 3 + 2] = (uint8_t)((flat >> 16) & 0xff);
                 continue;
             }
             const float t = top > 0.0f ? std::log1p((float)_m.counts[i]) / top : 0.0f;
+            auto ch = [](float v) { return (uint8_t)(255.0f * std::clamp(v, 0.0f, 1.0f)); };
             // Dark blue -> cyan -> white, which keeps the low end visible
             // against the panel and still separates the top decade.
-            px[i * 3 + 0] = (uint8_t)(255.0f * std::max(0.0f, t * 1.6f - 0.6f));
-            px[i * 3 + 1] = (uint8_t)(255.0f * std::min(1.0f, t * 1.5f));
-            px[i * 3 + 2] = (uint8_t)(255.0f * std::min(1.0f, 0.15f + t * 1.2f));
+            px[i * 3 + 0] = ch(t * 1.6f - 0.6f);
+            px[i * 3 + 1] = ch(t * 1.5f);
+            px[i * 3 + 2] = ch(0.15f + t * 1.2f);
         }
         if (!_tex) glGenTextures(1, &_tex);
         glBindTexture(GL_TEXTURE_2D, _tex);
@@ -116,6 +137,16 @@ bool MatchMatrix::draw(float size, PairBlock& block) {
     ImGui::Image((ImTextureID)(intptr_t)_tex, ImVec2(size, size));
     if (point) dl->AddCallback(pio.DrawCallback_SetSamplerLinear, nullptr);
     const bool hovered = ImGui::IsItemHovered();
+    if (_m.staged()) {
+        if (_phase) ui::Text(dmsg::matrix_phase_round, {(long long)_phase});
+        else        ui::Text(dmsg::matrix_phase_selection);
+        if (!_m.stage.empty()) {
+            const uint32_t checked = std::min(_m.phase_verified, _m.phase_planned);
+            ui::Text(dmsg::matrix_phase_counts,
+                     {(long long)(_m.phase_planned - checked), (long long)checked,
+                      (long long)_m.phase_planned, (long long)_m.phase_matched});
+        }
+    }
 
     // Wrapped by hand against the map's width: the four keys are one row in
     // English and three in German, and a legend wider than the picture it
@@ -133,6 +164,10 @@ bool MatchMatrix::draw(float size, PairBlock& block) {
     key(kMatchedCol, dmsg::matrix_key_matched);
     key(kNoMatchCol, dmsg::matrix_key_none);
     if (_m.staged()) key(kPendingCol, dmsg::matrix_key_pending);
+    if (_phase) {
+        key(kEarlierMatchedCol, dmsg::matrix_key_matched_earlier);
+        key(kEarlierNoMatchCol, dmsg::matrix_key_none_earlier);
+    }
     key(kFilteredCol, dmsg::matrix_key_skipped);
 
     if (!hovered) return false;
@@ -156,12 +191,16 @@ bool MatchMatrix::draw(float size, PairBlock& block) {
                  {(long long)lo_r, (long long)(hi_r - 1), (long long)lo_c,
                   (long long)(hi_c - 1),
                   (long long)_m.at((uint32_t)r, (uint32_t)c)});
-    switch (cell_state(_m, (size_t)r * _m.bins + c)) {
-        case Cell::Filtered: ui::TextDisabled(dmsg::matrix_key_skipped); break;
-        case Cell::Pending:  ui::TextDisabled(dmsg::matrix_key_pending); break;
-        case Cell::NoMatch:  ui::TextDisabled(dmsg::matrix_key_none); break;
-        case Cell::Matched:  break;
+    switch (cell_state(_m, (size_t)r * _m.bins + c, _phase)) {
+        case Cell::Filtered:       ui::TextDisabled(dmsg::matrix_key_skipped); break;
+        case Cell::Pending:        ui::TextDisabled(dmsg::matrix_key_pending); break;
+        case Cell::NoMatch:        ui::TextDisabled(dmsg::matrix_key_none); break;
+        case Cell::EarlierNoMatch: ui::TextDisabled(dmsg::matrix_key_none_earlier); break;
+        case Cell::EarlierMatched:
+        case Cell::Matched:        break;
     }
+    if (const uint32_t round = cell_round(_m, (size_t)r * _m.bins + c))
+        ui::TextDisabled(dmsg::matrix_cell_round, {(long long)round});
     ImGui::EndTooltip();
 
     block = {lo_r, std::max(hi_r, lo_r + 1), lo_c, std::max(hi_c, lo_c + 1)};

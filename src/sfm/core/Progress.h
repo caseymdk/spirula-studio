@@ -56,14 +56,16 @@ using PointColor = std::function<void(const Point3D&, uint8_t rgb[3])>;
 void model(const Reconstruction& rec, bool force = false,
            const PointColor& color = {});
 
-// pairs.bin: "VKPP", u32 version=2, u32 images, u32 bins, then three
-// bins*bins u32 planes -- summed inliers, candidate pairs, verified pairs.
-// The last two are what tell a cell nothing has reached it yet from a cell
-// pairing was never going to try.
-//
-// Matching is about to verify `pairs` among `n_images` images.
+// pairs.bin: "VKPP", u32 3, images, bins, bins^2 u32 planes (inliers, candidates,
+// verified, round), u32 phase + its candidates, verified, matched. Matching is
+// about to verify `pairs` among `n_images` images.
 void begin_matching(uint32_t n_images,
                     const std::vector<std::pair<uint32_t, uint32_t>>& pairs);
+// More candidates, from pair-expansion round `round` (>= 1).
+void add_candidates(const std::vector<std::pair<uint32_t, uint32_t>>& pairs, uint32_t round);
+// A pair reported with `inliers` that a later test threw out: it now reads as
+// verified with no match.
+void reject(uint32_t image1, uint32_t image2, uint32_t inliers);
 // One verified pair, `inliers` of 0 meaning it did not survive verification.
 // Safe to call from the verification workers.
 void pair(uint32_t image1, uint32_t image2, uint32_t inliers);
