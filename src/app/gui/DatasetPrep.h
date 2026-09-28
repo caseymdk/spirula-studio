@@ -597,6 +597,13 @@ bool folder_has_images(const std::string& dir);
 // The photo extensions an input folder is indexed for.
 bool is_image_file(const std::filesystem::path& p);
 
+// Do these file stems read as frames in order: at least 10, and 9 in 10 of them
+// one shared prefix and a zero-padded number of one width, all distinct -- so
+// file-name order is numeric order. What a video's extracted frames look like.
+bool names_look_in_order(const std::vector<std::string>& stems);
+// The same test over the images directly in `dir`.
+bool folder_looks_in_order(const std::string& dir);
+
 // Is this folder an already-reconstructed dataset -- something the trainer's
 // dataparsers can read -- rather than raw input? True for a Nerfstudio
 // transforms.json, a COLMAP sparse/ or colmap/, or a Metashape camera .xml

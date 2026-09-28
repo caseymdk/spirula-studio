@@ -82,6 +82,34 @@ bool is_image_file(const fs::path& p) {
            e == ".insp";
 }
 
+bool names_look_in_order(const std::vector<std::string>& stems) {
+    if (stems.size() < 10) return false;
+    std::map<std::pair<std::string, size_t>, std::vector<uint64_t>> groups;
+    for (const std::string& s : stems) {
+        size_t d = s.size();
+        while (d > 0 && std::isdigit((unsigned char)s[d - 1])) d--;
+        const size_t width = s.size() - d;
+        if (width == 0 || width > 18) continue;
+        groups[{s.substr(0, d), width}].push_back(std::stoull(s.substr(d)));
+    }
+    for (auto& g : groups) {
+        std::vector<uint64_t>& v = g.second;
+        if (v.size() * 10 < stems.size() * 9) continue;
+        std::sort(v.begin(), v.end());
+        return std::adjacent_find(v.begin(), v.end()) == v.end();
+    }
+    return false;
+}
+
+bool folder_looks_in_order(const std::string& dir) {
+    std::error_code ec;
+    std::vector<std::string> stems;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        if (it->is_regular_file(ec) && is_image_file(it->path()))
+            stems.push_back(it->path().stem().string());
+    return names_look_in_order(stems);
+}
+
 namespace {
 
 // NOT std::filesystem::remove_all -- on the torch build libtorch.so interposes

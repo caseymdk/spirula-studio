@@ -119,6 +119,9 @@ PrepInput make_source(const std::string& path, bool use_found_masks) {
         if (!use_found_masks) s.mask_dir.clear();
         s.packed_lenses = probe_packed_lenses(s.path);
         if (s.packed_lenses >= 2) s.rig = kRigOwn;
+        // Frames extracted from a video often arrive as a folder, and without
+        // this the mapper never learns their order; the row can still untick it.
+        s.sequential = folder_looks_in_order(s.path);
     }
     s.camera_model = default_lens(s);
     return s;

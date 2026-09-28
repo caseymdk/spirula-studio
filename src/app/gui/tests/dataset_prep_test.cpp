@@ -165,9 +165,37 @@ void test_camera_scan_skips_mask_edits() {
 
 }  // namespace
 
+// A folder of extracted frames defaults to "shot in order"; a photo collection
+// whose names only look numbered some of the time does not.
+void test_names_in_order() {
+    auto frames = [](const char* prefix, int n, int step, int width) {
+        std::vector<std::string> v;
+        for (int i = 0; i < n; i++) {
+            char b[64];
+            std::snprintf(b, sizeof b, "%s%0*d", prefix, width, i * step);
+            v.push_back(b);
+        }
+        return v;
+    };
+    check(gui::names_look_in_order(frames("", 40, 4, 5)), "00000, 00004, ... reads as in order");
+    check(gui::names_look_in_order(frames("frame_", 12, 1, 4)), "frame_0000 ... reads as in order");
+    check(!gui::names_look_in_order(frames("", 9, 1, 5)), "fewer than 10 frames is not enough");
+    std::vector<std::string> mixed = frames("IMG_", 10, 1, 4);
+    for (const char* s : {"beach", "sunset", "DSC_0001"}) mixed.push_back(s);
+    check(!gui::names_look_in_order(mixed), "a quarter of the names off the pattern is not in order");
+    std::vector<std::string> unpadded;
+    for (int i = 1; i <= 20; i++) unpadded.push_back(std::to_string(i));
+    check(!gui::names_look_in_order(unpadded), "unpadded numbers sort 1, 10, 11 ... and are not trusted");
+    std::vector<std::string> dup = frames("", 12, 1, 3);
+    dup.push_back("a_005");
+    for (auto& s : dup) if (s == "007") s = "006";
+    check(!gui::names_look_in_order(dup), "a repeated number is not an order");
+}
+
 int main() {
     test_rerun_reapplies_corrections();
     test_camera_scan_skips_mask_edits();
+    test_names_in_order();
     std::printf("%s: %d failure(s)\n", SS_FILE, g_failures);
     return g_failures;
 }
