@@ -826,7 +826,7 @@ private:
     // Every task of the row ran and finished well.
     bool batch_row_done(int index) const;
     // "Clear list" and "Clear done rows" both ask first.
-    enum class BatchConfirm { None, ClearList, ClearDone };
+    enum class BatchConfirm { None, ClearList, ClearDone, ClearUnchecked };
     BatchConfirm _batch_confirm = BatchConfirm::None;
     bool _batch_confirm_shown = false;
     void draw_batch_confirm_modal();

@@ -864,6 +864,7 @@ BatchRow read_row(const JsonValue& j) {
         for (int i = 0; i < kNumBatchStages && i < (int)v->arr.size(); i++)
             r.stages[i] = v->arr[(size_t)i].as_bool();
     if (const JsonValue* v = j.find("enabled")) r.enabled = v->as_bool(true);
+    if (const JsonValue* v = j.find("done")) r.done = v->as_bool(false) && !r.enabled;
     return r;
 }
 
@@ -948,6 +949,7 @@ void save_batch_list(const std::vector<BatchRow>& rows) {
         for (int i = 0; i < kNumBatchStages; i++) w.value(r.stages[i]);
         w.end();
         w.field("enabled", r.enabled);
+        if (r.done) w.field("done", true);
         w.end();
     }
     w.end();

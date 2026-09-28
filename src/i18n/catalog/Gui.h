@@ -4628,31 +4628,63 @@ SS_MSG(batch_clear_done,
     NL("Klare rijen verwijderen"), RU("Убрать завершённые строки"),
     TR("Biten satırları temizle"));
 SS_MSG(batch_clear_done_help,
-    EN("Removes every row whose tasks all finished well in the last run of the "
-       "list. Rows that failed, were stopped or never ran stay."),
-    JA("直近の実行で全タスクが成功した行をすべて消します。失敗・停止・未実行の行は"
+    EN("Removes every row whose tasks all finished well the last time it ran. "
+       "Rows that failed, were stopped or never ran stay."),
+    JA("最後に実行したとき全タスクが成功した行をすべて消します。失敗・停止・未実行の行は"
        "残ります。"),
-    ZH_HANS("删除上次运行中所有任务都成功完成的行。失败、被停止或未运行的行保留。"),
-    ZH_HANT("刪除上次執行中所有任務都成功完成的列。失敗、被停止或未執行的列保留。"),
-    KO("마지막 실행에서 모든 작업이 잘 끝난 행을 모두 지웁니다. 실패했거나 중단됐"
-       "거나 실행되지 않은 행은 남습니다."),
-    DE("Entfernt jede Zeile, deren Aufgaben beim letzten Lauf der Liste alle gut "
+    ZH_HANS("删除上次运行时所有任务都成功完成的行。失败、被停止或未运行的行保留。"),
+    ZH_HANT("刪除上次執行時所有任務都成功完成的列。失敗、被停止或未執行的列保留。"),
+    KO("마지막으로 실행했을 때 모든 작업이 잘 끝난 행을 모두 지웁니다. 실패했거나 "
+       "중단됐거나 실행되지 않은 행은 남습니다."),
+    DE("Entfernt jede Zeile, deren Aufgaben bei ihrem letzten Lauf alle gut "
        "endeten. Fehlgeschlagene, gestoppte oder nie gelaufene Zeilen bleiben."),
-    FR("Retire chaque ligne dont toutes les tâches ont bien fini lors du dernier "
-       "passage. Les lignes échouées, arrêtées ou jamais lancées restent."),
-    ES("Quita cada fila cuyas tareas terminaron todas bien en la última ejecución "
-       "de la lista. Las filas fallidas, detenidas o nunca ejecutadas se quedan."),
-    PT("Remove cada linha cujas tarefas terminaram todas bem na última execução "
-       "da lista. As linhas falhadas, paradas ou nunca executadas ficam."),
-    IT("Rimuove ogni riga i cui compiti sono finiti tutti bene nell'ultima "
-       "esecuzione della lista. Le righe fallite, fermate o mai eseguite restano."),
-    NL("Verwijdert elke rij waarvan alle taken bij de laatste run goed eindigden. "
-       "Mislukte, gestopte of nooit gedraaide rijen blijven."),
-    RU("Убирает каждую строку, все задачи которой успешно завершились при "
-       "последнем прогоне списка. Неудачные, остановленные и не запускавшиеся "
-       "строки остаются."),
-    TR("Listenin son çalışmasında tüm görevleri iyi biten her satırı kaldırır. "
-       "Başarısız, durdurulmuş ya da hiç çalışmamış satırlar kalır."));
+    FR("Retire chaque ligne dont toutes les tâches ont bien fini la dernière fois "
+       "qu'elle a tourné. Les lignes échouées, arrêtées ou jamais lancées restent."),
+    ES("Quita cada fila cuyas tareas terminaron todas bien la última vez que se "
+       "ejecutó. Las filas fallidas, detenidas o nunca ejecutadas se quedan."),
+    PT("Remove cada linha cujas tarefas terminaram todas bem da última vez que "
+       "correu. As linhas falhadas, paradas ou nunca executadas ficam."),
+    IT("Rimuove ogni riga i cui compiti sono finiti tutti bene l'ultima volta che "
+       "è stata eseguita. Le righe fallite, fermate o mai eseguite restano."),
+    NL("Verwijdert elke rij waarvan alle taken de laatste keer dat hij draaide goed "
+       "eindigden. Mislukte, gestopte of nooit gedraaide rijen blijven."),
+    RU("Убирает каждую строку, все задачи которой успешно завершились при её "
+       "последнем запуске. Неудачные, остановленные и не запускавшиеся строки "
+       "остаются."),
+    TR("Son çalıştığında tüm görevleri iyi biten her satırı kaldırır. Başarısız, "
+       "durdurulmuş ya da hiç çalışmamış satırlar kalır."));
+SS_MSG(batch_clear_unchecked,
+    EN("Clear unchecked rows"), JA("チェックのない行を消す"), ZH_HANS("清除未勾选的行"),
+    ZH_HANT("清除未勾選的列"), KO("체크 해제된 행 지우기"),
+    DE("Nicht angehakte Zeilen entfernen"), FR("Retirer les lignes non cochées"),
+    ES("Quitar las filas sin marcar"), PT("Remover as linhas não marcadas"),
+    IT("Rimuovi le righe non spuntate"), NL("Niet-aangevinkte rijen verwijderen"),
+    RU("Убрать строки без отметки"), TR("İşaretsiz satırları temizle"));
+SS_MSG(batch_clear_unchecked_help,
+    EN("Removes every row whose box is unticked, done or not: the ones a run "
+       "would leave out."),
+    JA("チェックの外れた行を、完了したかどうかに関わらずすべて消します。実行で"
+       "飛ばされる行です。"),
+    ZH_HANS("删除所有未勾选的行，无论是否已完成：即运行时会跳过的行。"),
+    ZH_HANT("刪除所有未勾選的列，無論是否已完成：即執行時會略過的列。"),
+    KO("완료 여부와 상관없이 체크가 해제된 행을 모두 지웁니다. 실행 때 건너뛰는 "
+       "행들입니다."),
+    DE("Entfernt jede Zeile ohne Haken, ob fertig oder nicht: die, die ein Lauf "
+       "auslassen würde."),
+    FR("Retire chaque ligne décochée, terminée ou non : celles qu'un passage "
+       "laisserait de côté."),
+    ES("Quita cada fila sin marcar, terminada o no: las que una ejecución dejaría "
+       "fuera."),
+    PT("Remove cada linha sem marca, terminada ou não: as que uma execução "
+       "deixaria de fora."),
+    IT("Rimuove ogni riga senza spunta, finita o no: quelle che un'esecuzione "
+       "salterebbe."),
+    NL("Verwijdert elke rij zonder vinkje, klaar of niet: de rijen die een run "
+       "zou overslaan."),
+    RU("Убирает каждую строку без отметки, завершённую или нет, — те, что запуск "
+       "пропустил бы."),
+    TR("İşareti kaldırılmış her satırı, bitmiş olsun olmasın, kaldırır: bir "
+       "çalışmanın atlayacağı satırlar."));
 SS_MSG(batch_confirm_title,
     EN("Batch list"), JA("バッチ一覧"), ZH_HANS("批处理列表"), ZH_HANT("批次處理列表"),
     KO("배치 목록"), DE("Stapelliste"), FR("Liste du lot"), ES("Lista del lote"),
@@ -4698,6 +4730,22 @@ SS_MSG(batch_clear_done_confirm,
     NL("De goed geëindigde rijen verwijderen? Wat ze schreven blijft op schijf."),
     RU("Убрать успешно завершённые строки? Записанное ими остаётся на диске."),
     TR("İyi biten satırlar kaldırılsın mı? Yazdıkları diskte kalır."));
+SS_MSG(batch_clear_unchecked_confirm,
+    EN("Remove the unticked rows? What they wrote stays on disk."),
+    JA("チェックのない行を消しますか？書き出したものはディスクに残ります。"),
+    ZH_HANS("删除未勾选的行？它们写出的内容仍保留在磁盘上。"),
+    ZH_HANT("刪除未勾選的列？它們寫出的內容仍保留在磁碟上。"),
+    KO("체크 해제된 행을 지울까요? 그 행들이 기록한 것은 디스크에 남습니다."),
+    DE("Die nicht angehakten Zeilen entfernen? Was sie geschrieben haben, bleibt "
+       "auf der Platte."),
+    FR("Retirer les lignes non cochées ? Ce qu'elles ont écrit reste sur le "
+       "disque."),
+    ES("¿Quitar las filas sin marcar? Lo que escribieron sigue en el disco."),
+    PT("Remover as linhas não marcadas? O que escreveram fica no disco."),
+    IT("Rimuovere le righe non spuntate? Ciò che hanno scritto resta su disco."),
+    NL("De niet-aangevinkte rijen verwijderen? Wat ze schreven blijft op schijf."),
+    RU("Убрать строки без отметки? Записанное ими остаётся на диске."),
+    TR("İşaretsiz satırlar kaldırılsın mı? Yazdıkları diskte kalır."));
 
 SS_MSG(batch_clear,
     EN("Clear list"),
