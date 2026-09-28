@@ -165,6 +165,11 @@ add_library(ss_sfm STATIC
 )
 target_include_directories(ss_sfm PUBLIC ${SS_SRC})
 target_link_libraries(ss_sfm PUBLIC ss_vulkan Threads::Threads ss_i18n)
+# Accelerate's LAPACK for the host BA's dense Cholesky (src/sfm/ba/CpuLapack.h).
+if(APPLE)
+    target_link_libraries(ss_sfm PUBLIC "-framework Accelerate")
+    target_compile_definitions(ss_sfm PRIVATE SS_SFM_ACCELERATE=1)
+endif()
 
 # The learned frontend (src/aliked/) is optional: it sits on the inference
 # layer, which is SS_BUILD_SAM. Without it `--features aliked-*` is a

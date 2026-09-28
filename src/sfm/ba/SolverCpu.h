@@ -321,6 +321,7 @@ private:
 
     double estimateMB(bool withDense, bool withCG) const {
         const double no = (double)nObs_, np = (double)nPts_, ni = (double)nImg_, n = (double)n_;
+        const double spd = lapackEnabled() ? 2 : 1;  // a LAPACK factors out of place
         double b = 0;
         b += ((double)P_.jc_total + 8 * no) * 8;              // Jc, Jp, res
         b += (9 + 9 + 3 + 3) * np * 8;                        // App, W, Bp, Bp0
@@ -328,11 +329,11 @@ private:
         b += 4 * no + 4 * (ni + 1) + 12 * (no / 1024 + ni);   // obs-by-image CSR + chunks
         b += n * 8;                                           // g
         if (withDense) {
-            b += (double)DenseSpd::elems(n_) * 8 + 2.0 * n * DenseSpd::kBlock * 8;
+            b += spd * DenseSpd::elems(n_) * 8 + 2.0 * n * DenseSpd::kBlock * 8;
             b += (double)nthreads_ * m_ * n * 8;
         }
         if (withCG && tcN_)
-            b += ((double)DenseSpd::elems(tcN_) + 2.0 * tcN_ * DenseSpd::kBlock +
+            b += (spd * DenseSpd::elems(tcN_) + 2.0 * tcN_ * DenseSpd::kBlock +
                   42.0 * P_.num_frames + tcN_) * 8 + 8.0 * tcEntries_;
         if (withCG) {
             const double nblk = exclusive_ ? ni : (double)P_.num_frames + nSharedBlk_;

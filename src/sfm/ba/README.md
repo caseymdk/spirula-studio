@@ -35,6 +35,7 @@ sfm/ba/
   SolverCpu.h        the same solver on the host -- see "Host fallback" below
   CpuCamera.h        host mirror of the camera and loss models, forward-mode duals
   CpuDense.h         packed blocked Cholesky for the host path
+  CpuLapack.h        the same factorization through Accelerate, on macOS
   CpuParallel.h      the process-wide worker pool the host path runs on
 src/app/cli/sfm_ba.cpp   the `spirula sfm ba` subcommand: a model's global BA, or a BAL problem
 ```
@@ -466,6 +467,22 @@ of every tile update are unit-stride. 132 GFLOP/s at `n_dim = 6102` on an
 i9-14900HX (32 threads), 17.6 single-threaded, which is ~88% of the SSE2
 baseline's peak; `-march=native` measured 1.27x on top and is deliberately not
 taken, since nothing else in the tree is built for it.
+
+On macOS the factorization goes to Accelerate instead (`CpuLapack.h`): the
+packed triangle is LAPACK's column-major packed upper one, so `dtpttf` turns it
+into rectangular full packed storage, `dpftrf` factors that, and `dtfttp` writes
+the factor back where `CpuDense.h` keeps it -- n(n+1)/2 doubles of scratch, not
+the n^2 a plain `dpotrf` would need. The pivot guard above still holds. A held
+parameter's empty row, which nearly every mapper solve has and `dpftrf` refuses
+as a zero pivot, gets the guard's value before the factorization, which is exact
+for an empty row; any other pivot the guard would replace, or a LAPACK failure,
+leaves the matrix untouched and the blocked code factors it. `SS_SFM_BA_LAPACK=0`
+turns it off, for comparison.
+
+Measured on an M5 (10 cores): the linear solve at `n_dim = 11178` 7.4 s -> 3.0 s
+over two LM iterations, same final cost; a 1872-frame mapping 731 s -> 600 s,
+the dense solves' linear time 250 s -> 132 s, the same 11536 LM iterations and
+camera centres within 3.4e-7 of a scene radius of 1.1.
 
 Measured against the fp64 GPU path on an RTX 5070 Laptop, same machine, one
 global BA: a 152-image capture 1.85 s against 0.81 s, a 1015-image one

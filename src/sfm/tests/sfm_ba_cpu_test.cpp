@@ -8,6 +8,7 @@
 //   sfm_ba_cpu_test [--quick]
 //
 // Prints PASS/FAIL per case and returns 0/1. Needs no GPU. See docs/testing.md.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -87,6 +88,44 @@ void testChol(uint32_t n) {
     char name[64];
     snprintf(name, sizeof name, "chol n=%u", n);
     report(name, e / s, 1e-10);
+}
+
+// The LAPACK path's pivot guard (CpuLapack.h), which reads the pivots out of
+// the RFP layout: a well-posed matrix must pass it and one weak pivot, at every
+// position, must be refused with the input left as it was; an empty row is not.
+void testLapackGuard(uint32_t n) {
+    if (!bacpu::lapackEnabled()) return;
+    std::mt19937 rng(5);
+    std::uniform_real_distribution<double> small(-0.05, 0.05);
+    std::vector<double> A(bacpu::DenseSpd::elems(n)), rfp(A.size()), diag(n, 4.0);
+    for (uint32_t r = 0; r < n; r++)
+        for (uint32_t c = 0; c <= r; c++)
+            A[bacpu::DenseSpd::rowOff(r) + c] = r == c ? 4.0 : small(rng) / n;
+    int bad = 0;
+    std::vector<double> a = A;
+    if (!bacpu::lapackFactor(a.data(), rfp.data(), n, diag.data(), 0.1)) bad++;
+    for (uint32_t w = 0; w < n && n > 1; w++) {  // at n = 1 a weak pivot is an empty row
+        a = A;
+        a[bacpu::DenseSpd::rowOff(w) + w] = 0.2;
+        const std::vector<double> keep = a;
+        if (bacpu::lapackFactor(a.data(), rfp.data(), n, diag.data(), 0.1) || a != keep) bad++;
+    }
+    // An empty row (a held parameter) is factored, its pivot set as the guard sets it.
+    for (uint32_t w = 0; w < n; w += std::max(1u, n / 7))
+        for (const double* dg : {(const double*)nullptr, (const double*)diag.data()}) {
+            a = A;
+            for (uint32_t c = 0; c <= w; c++) a[bacpu::DenseSpd::rowOff(w) + c] = 0;
+            for (uint32_t r = w + 1; r < n; r++) a[bacpu::DenseSpd::rowOff(r) + w] = 0;
+            if (!bacpu::lapackFactor(a.data(), rfp.data(), n, dg, 0.1)) {
+                bad++;
+                continue;
+            }
+            const double want = dg ? 2.0 : 1e-15, got = a[bacpu::DenseSpd::rowOff(w) + w];
+            if (std::fabs(got - want) > 1e-12 * want) bad++;
+        }
+    char name[64];
+    snprintf(name, sizeof name, "lapack pivot guard n=%u", n);
+    report(name, bad, 0.5);
 }
 
 // ---------------------------------------------------------------------------
@@ -543,6 +582,8 @@ int run(int argc, char** argv) {
 
     testChol(37);
     testChol(200);
+    testChol(201);
+    for (uint32_t n : {1u, 2u, 5u, 6u, 37u, 200u}) testLapackGuard(n);
     if (!quick) testChol(400);
 
     std::mt19937 rng(99);

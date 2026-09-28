@@ -4,7 +4,8 @@
 // That layout has a per-row stride, so the trailing update copies the current
 // block column out to a contiguous panel once per step -- 4n^2 bytes over the
 // factorization against n^3/3 flops -- and both operands of every tile update
-// are then unit-stride.
+// are then unit-stride. Where the build has a LAPACK (CpuLapack.h), that
+// factors instead and this is the fallback.
 #pragma once
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <cstring>
 #include <vector>
 
+#include "sfm/ba/CpuLapack.h"
 #include "sfm/ba/CpuParallel.h"
 
 namespace bacpu {
@@ -27,19 +29,22 @@ public:
         panel_.resize((size_t)n * kBlock);
         panelT_.resize((size_t)n * kBlock);
         diag_.resize((size_t)kBlock * kBlock);
+        if (lapackEnabled()) rfp_.resize(elems(n));
     }
     void release() {
         a_ = std::vector<double>();
         panel_ = std::vector<double>();
         panelT_ = std::vector<double>();
         diag_ = std::vector<double>();
+        rfp_ = std::vector<double>();
     }
 
     static uint64_t elems(uint32_t n) { return (uint64_t)n * (n + 1) / 2; }
     static uint64_t rowOff(uint32_t r) { return (uint64_t)r * (r + 1) / 2; }
     bool allocated() const { return !a_.empty(); }
     size_t bytes() const {
-        return (a_.capacity() + panel_.capacity() + panelT_.capacity() + diag_.capacity()) * 8;
+        return (a_.capacity() + panel_.capacity() + panelT_.capacity() + diag_.capacity() +
+                rfp_.capacity()) * 8;
     }
     double* row(uint32_t r) { return a_.data() + rowOff(r); }
     const double* row(uint32_t r) const { return a_.data() + rowOff(r); }
@@ -65,6 +70,7 @@ public:
     // With `diag`, a pivot under `rel` of its row's diag entry is replaced by
     // that entry (cholesky.slang's pivot(), for the coarse matrix).
     void factor(Pool& pool, int nthreads, const double* diag = nullptr, double rel = 0) {
+        if (!rfp_.empty() && lapackFactor(a_.data(), rfp_.data(), n_, diag, rel)) return;
         diag_in_ = diag;
         rel_ = rel;
         const uint32_t nb = (n_ + kBlock - 1) / kBlock;
@@ -263,7 +269,7 @@ private:
         }
     }
 
-    std::vector<double> a_, panel_, panelT_, diag_;
+    std::vector<double> a_, panel_, panelT_, diag_, rfp_;
     const double* diag_in_ = nullptr;
     double rel_ = 0;
     uint32_t n_ = 0;
