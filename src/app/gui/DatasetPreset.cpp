@@ -273,6 +273,25 @@ void sanitize_dataset_settings(DatasetSettings& s) {
 }
 
 
+std::string dataset_settings_json(const DatasetSettings& s) {
+    JsonWriter w;
+    w.object();
+#define SS_DS_EMIT(key, member) w.field_raw(key, json_field::emit(s.member));
+    SS_DATASET_PRESET_FIELDS(SS_DS_EMIT)
+#undef SS_DS_EMIT
+    w.end();
+    return w.str();
+}
+
+void read_dataset_settings_json(const JsonValue& fields, DatasetSettings& s) {
+    if (!fields.is_object()) return;
+#define SS_DS_LOAD(key, member)                                               \
+    if (const JsonValue* v = fields.find(key)) json_field::assign(s.member, *v);
+    SS_DATASET_PRESET_FIELDS(SS_DS_LOAD)
+#undef SS_DS_LOAD
+    sanitize_dataset_settings(s);
+}
+
 void save_dataset_preset(const DatasetPreset& p, const std::string& path) {
     PresetHeader head{p.name, p.description, path};
     JsonWriter w = preset_writer(PresetKind::Dataset, head);
