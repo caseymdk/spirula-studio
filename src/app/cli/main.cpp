@@ -103,11 +103,11 @@ void consume(std::array<T, N>& out, const std::string& key, int argc, char** arg
     }
 }
 
-// Choices validation for string fields. `choices` is "a|b|c" ('' free-form);
-// a lone "none" marks an optional free-form string.
+// Choices validation for string fields. `choices` is "a|b|c", or one of the
+// free-form spellings train_choices_free_form() knows.
 void check_choices(const std::string& value, const std::string& key, const char* choices) {
+    if (train_choices_free_form(choices)) return;
     std::string ch = choices;
-    if (ch.empty() || ch == "none") return;
     std::string want = value.empty() ? "none" : value;
     size_t pos = 0;
     while (pos <= ch.size()) {
@@ -340,7 +340,7 @@ void print_help(const char* argv0, const TrainConfig& c, int max_tier) {
         for (auto& ck : key_disp) if (ck == '_') ck = '-';                     \
         std::printf("  --%-38s [%s]%s%s\n      %s\n", key_disp.c_str(),        \
                     value_str(c.member).c_str(),                               \
-                    (ch.empty() || ch == "none") ? "" : (" {" + ch + "}").c_str(), \
+                    train_choices_free_form(choices) ? "" : (" {" + ch + "}").c_str(), \
                     "", h.c_str());                                            \
     }
     SS_CONFIG_FIELDS(SS_PRINT_HELP)
@@ -536,6 +536,10 @@ int spirula_train_main(int argc, char** argv) {
                 for (const char* k : {"rgb_loss", "ssim", "psnr"}) {
                     auto it = p.losses.find(k);
                     if (it != p.losses.end()) std::printf("  %s=%.4g", k, it->second);
+                }
+                for (const char* k : {"num_dead", "num_relocated", "num_added"}) {
+                    auto it = p.losses.find(k);
+                    if (it != p.losses.end()) std::printf("  %s=%lld", k, (long long)it->second);
                 }
                 std::printf("\n");
                 std::fflush(stdout);

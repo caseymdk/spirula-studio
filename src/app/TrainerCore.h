@@ -18,6 +18,7 @@
 // setup_engine() calls engine_reset(), so a fresh session can follow a
 // finished one in the same process (the GUI's "train again" path).
 
+#include "app/TrainForecast.h"
 #include "engine/Engine.h"
 #include "core/ColorSpace.h"
 #include "data/DatasetParser.h"
@@ -127,6 +128,7 @@ void append_point_seeds(SeedSplats& s, const ColmapPoints3D& pts,
 
 struct RunState {
     float train_frame_scale = 1.0f;
+    int   steps_per_epoch = 1;   // optimizer steps per pass over the train set
     bool  splat_linear = false;
     // Resolved against the dataset's lenses when the flag is unset; see
     // TrainerCore.cpp.
@@ -209,6 +211,7 @@ public:
     bool has_mask = false;
     bool has_depth = false;
     bool has_normal = false;
+    bool random_seeded = false;
     // probe_alpha_masks over `ds`: [N] flags, empty when no image is a cut-out.
     std::vector<uint8_t> alpha_images;
 
@@ -298,9 +301,11 @@ public:
     // train() starts, frozen once it returns.
     double elapsed_seconds() const;
 
-    // Remaining wall clock over the last 100 steps' average, or -1 before
-    // the first step lands.
+    // Remaining wall clock, from TrainForecast's step-time model and the
+    // densify schedule still to come; -1 before the first step lands.
     double eta_seconds() const;
+    // The run's ETA and VRAM forecast, fed by train().
+    const TrainForecast& forecast() const { return _forecast; }
 
     // The /progress response body.
     std::string progress_json();
@@ -333,6 +338,12 @@ private:
     mutable std::mutex _progress_mutex;    // guards the latency window
     std::deque<double> _step_latencies;    // last 100, seconds
     bool _diverged_loss_reported = false;
+
+    void observe_memory(int step, int64_t splats_ran);
+    TrainForecast _forecast;
+    int _batches_per_epoch = 1;
+    std::atomic<int64_t> _live_splats{0};
+    OomRisk _warned_risk = OomRisk::Low;
 };
 
 }  // namespace spirula

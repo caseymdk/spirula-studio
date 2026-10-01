@@ -89,7 +89,9 @@ GrayImage loadGrayImage(const std::string& path, int max_image_size = 3200,
                         bool flip_mask = false,
                         // Turns the pixels and the mask, leaving exif.orientation
                         // at 1; a tag's MIRROR half is dropped (docs/datasets.md).
-                        bool apply_exif_orientation = false);
+                        bool apply_exif_orientation = false,
+                        // Intersected into `mask_path`'s (intersectMask), unflipped.
+                        const std::string& feature_mask_path = "");
 
 // Read just the pixel dimensions from an image header (no full decode).
 // Returns false if the file is not a decodable image.

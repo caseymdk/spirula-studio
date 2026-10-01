@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace colorspace {
 
@@ -201,6 +202,65 @@ inline void to_srgb_inplace(uint8_t* rgb, size_t n,
         }
     }
 }
+
+// Exact 8-bit quantization of linear_to_srgb: thresh[c] is the linear value at
+// which the code steps to c+1, so the search cannot disagree with the curve.
+inline const float* srgb8_thresholds() {
+    static const std::vector<float> t = [] {
+        std::vector<float> v(255);
+        for (int c = 0; c < 255; c++)
+            v[(size_t)c] = srgb_to_linear((c + 0.5f) / 255.0f);
+        return v;
+    }();
+    return t.data();
+}
+
+inline uint8_t quantize_srgb8(const float* thresh, float x) {
+    int lo = 0, hi = 255;
+    while (lo < hi) {
+        const int m = (lo + hi + 1) >> 1;
+        if (x >= thresh[m - 1]) lo = m;
+        else                    hi = m - 1;
+    }
+    return (uint8_t)lo;
+}
+
+inline uint8_t quantize_unit8(float x) {
+    return (uint8_t)std::lround(std::min(std::max(x, 0.0f), 1.0f) * 255.0f);
+}
+
+// Float pixels in (gamut, is_linear) to 8-bit sRGB, `nc` = 1, 3 or 4 per
+// pixel. One channel is achromatic, and every gamut maps white to white, so
+// only the transfer applies to it; a fourth is alpha.
+struct Srgb8Encoder {
+    Mat3 m;
+    bool linear;
+    bool identity;
+    const float* thresh;
+
+    Srgb8Encoder(const std::string& gamut, bool is_linear)
+        : m(gamut_to_rec709(gamut)), linear(is_linear),
+          identity(is_identity(gamut, is_linear)), thresh(srgb8_thresholds()) {}
+
+    void operator()(const float* px, uint8_t* o, size_t n, int nc) const {
+        for (size_t i = 0; i < n; i++, px += nc, o += nc) {
+            if (nc == 1) {
+                o[0] = linear ? quantize_srgb8(thresh, px[0]) : quantize_unit8(px[0]);
+                continue;
+            }
+            if (identity) {
+                for (int c = 0; c < 3; c++) o[c] = quantize_unit8(px[c]);
+            } else {
+                float v[3] = {px[0], px[1], px[2]};
+                if (!linear)
+                    for (int c = 0; c < 3; c++) v[c] = srgb_to_linear(v[c]);
+                apply3x3(m, v);
+                for (int c = 0; c < 3; c++) o[c] = quantize_srgb8(thresh, v[c]);
+            }
+            if (nc == 4) o[3] = quantize_unit8(px[3]);
+        }
+    }
+};
 
 // The inverse of to_srgb_inplace.
 inline void from_srgb_inplace(uint8_t* rgb, size_t n,

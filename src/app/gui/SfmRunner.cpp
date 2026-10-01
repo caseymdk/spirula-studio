@@ -290,6 +290,7 @@ void SfmRunner::take_masking(PrepJob& prep) {
     prep.mask_enable = _live.prep.mask_enable;
     prep.mask_prompt = _live.prep.mask_prompt;
     prep.mask_negative_prompt = _live.prep.mask_negative_prompt;
+    prep.mask_feature_prompt = _live.prep.mask_feature_prompt;
     prep.mask_keep_subject = _live.prep.mask_keep_subject;
     prep.mask_max_image_size = _live.prep.mask_max_image_size;
     prep.mask_dilate_ratio = _live.prep.mask_dilate_ratio;
@@ -302,11 +303,8 @@ void SfmRunner::take_masking(PrepJob& prep) {
     prep.mask_model_path = _live.prep.mask_model_path;
     prep.mask_detector_path = _live.prep.mask_detector_path;
     prep.mask_detector_threshold = _live.prep.mask_detector_threshold;
-    prep.mask_model_name = _live.prep.mask_model_name;
-    prep.force_external_masking = _live.prep.force_external_masking;
     prep.image_gamut = _live.prep.image_gamut;
     prep.image_is_linear = _live.prep.image_is_linear;
-    prep.python_exe = _live.prep.python_exe;
 }
 
 void SfmRunner::cancel() { _cancel = true; }
@@ -791,6 +789,11 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
         // from an earlier run with masking on.
         argv.push_back("--no-masks");
     }
+    // Whatever the checkbox says: these exist only to be kept from the features.
+    if (!prep.feature_mask_dir.empty()) {
+        argv.push_back("--feature-masks");
+        argv.push_back(prep.feature_mask_dir);
+    }
     for (const std::string& a : split_args(job.extra_args))
         argv.push_back(a);
     return argv;
@@ -906,8 +909,8 @@ void SfmRunner::run(SfmJob job) {
             for (size_t k = 0; k < now.args.size(); k++) {
                 settings.push_back(now.args[k]);
                 if (now.args[k] != "--manifest" || k + 1 >= now.args.size()) continue;
-                // Dotted and prefixed, like .spirula_mask.py: the workspace
-                // is the user's, and a plain manifest.yaml there could be theirs.
+                // Dotted and prefixed: the workspace is the user's, and a
+                // plain manifest.yaml there could be theirs.
                 const fs::path mf = ws / ".spirula_manifest.yaml";
                 std::ofstream(mf, std::ios::binary | std::ios::trunc) << now.args[++k];
                 settings.push_back(mf.string());

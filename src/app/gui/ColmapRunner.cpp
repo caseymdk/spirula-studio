@@ -271,6 +271,7 @@ void ColmapRunner::take_masking(PrepJob& prep) {
     prep.mask_enable = _live.mask_enable;
     prep.mask_prompt = _live.mask_prompt;
     prep.mask_negative_prompt = _live.mask_negative_prompt;
+    prep.mask_feature_prompt = _live.mask_feature_prompt;
     prep.mask_keep_subject = _live.mask_keep_subject;
     prep.mask_max_image_size = _live.mask_max_image_size;
     prep.mask_dilate_ratio = _live.mask_dilate_ratio;
@@ -285,9 +286,6 @@ void ColmapRunner::take_masking(PrepJob& prep) {
     prep.mask_model_path = _live.mask_model_path;
     prep.mask_detector_path = _live.mask_detector_path;
     prep.mask_detector_threshold = _live.mask_detector_threshold;
-    prep.mask_model_name = _live.mask_model;
-    prep.force_external_masking = _live.force_external_masking;
-    prep.python_exe = _live.python_exe;
 }
 
 void ColmapRunner::cancel() { _cancel = true; }
@@ -462,6 +460,7 @@ static std::vector<std::string> colmap_recon_args(const ColmapJob& job) {
         "--vocab-tree", job.vocab_tree_path,
         "--masks", flag(job.mask_enable && job.mask_features),
         "--mask-prompt", job.mask_enable ? job.mask_prompt : std::string(),
+        "--feature-prompt", job.mask_enable ? job.mask_feature_prompt : std::string(),
     };
 }
 
@@ -532,6 +531,7 @@ void ColmapRunner::run(ColmapJob job) {
             pj.mask_enable = job.mask_enable;
             pj.mask_prompt = job.mask_prompt;
             pj.mask_negative_prompt = job.mask_negative_prompt;
+            pj.mask_feature_prompt = job.mask_feature_prompt;
             pj.mask_keep_subject = job.mask_keep_subject;
             pj.mask_max_image_size = job.mask_max_image_size;
             pj.mask_dilate_ratio = job.mask_dilate_ratio;
@@ -544,9 +544,6 @@ void ColmapRunner::run(ColmapJob job) {
             pj.mask_model_path = job.mask_model_path;
             pj.mask_detector_path = job.mask_detector_path;
             pj.mask_detector_threshold = job.mask_detector_threshold;
-            pj.mask_model_name = job.mask_model;
-            pj.force_external_masking = job.force_external_masking;
-            pj.python_exe = job.python_exe;
 
             DatasetPrep dp(&_prog, _films, _cancel);
             if (!dp.run(pj, prep, err, [this](PrepJob& p) { take_masking(p); }))
@@ -664,9 +661,26 @@ void ColmapRunner::run(ColmapJob job) {
                 shared.push_back("--SiftExtraction.estimate_affine_shape");
                 shared.push_back("1");
             }
-            if (have_masks && job.mask_features) {
+            // COLMAP reads one mask tree, so the feature-only masks are
+            // intersected into a copy when training's are wanted there too.
+            std::string colmap_masks = have_masks && job.mask_features ? prep.mask_dir : "";
+            const fs::path both = ws / ".colmap_masks";
+            remove_tree(both);
+            if (!prep.feature_mask_dir.empty()) {
+                if (colmap_masks.empty()) {
+                    colmap_masks = prep.feature_mask_dir;
+                } else {
+                    std::string err;
+                    if (app::intersect_mask_trees(images, colmap_masks, prep.mask_dir_flipped,
+                                                  prep.feature_mask_dir, both.string(),
+                                                  &_cancel, err) < 0)
+                        return fail("could not write " + err);
+                    colmap_masks = both.string();
+                }
+            }
+            if (!colmap_masks.empty()) {
                 shared.push_back("--ImageReader.mask_path");
-                shared.push_back(prep.mask_dir);
+                shared.push_back(colmap_masks);
             }
             int rc = 0;
             std::vector<std::vector<std::string>> passes;
@@ -708,6 +722,7 @@ void ColmapRunner::run(ColmapJob job) {
                 if (rc == kCancelled) return fail("cancelled");
                 if (rc != 0) return fail("colmap feature_extractor failed (see log)");
             }
+            remove_tree(both);
 
             // ---- 4. matching -----------------------------------------------------
             // An explicit choice: the GUI presets sequential for video and

@@ -237,6 +237,38 @@ inline __device__ bool region_contains(float3  p_3, float3  n_3, bool has_n_2, f
 {
     bool b_0;
     FixedArray<bool, 32>  stack_1;
+    stack_1[int(0)] = false;
+    stack_1[int(1)] = false;
+    stack_1[int(2)] = false;
+    stack_1[int(3)] = false;
+    stack_1[int(4)] = false;
+    stack_1[int(5)] = false;
+    stack_1[int(6)] = false;
+    stack_1[int(7)] = false;
+    stack_1[int(8)] = false;
+    stack_1[int(9)] = false;
+    stack_1[int(10)] = false;
+    stack_1[int(11)] = false;
+    stack_1[int(12)] = false;
+    stack_1[int(13)] = false;
+    stack_1[int(14)] = false;
+    stack_1[int(15)] = false;
+    stack_1[int(16)] = false;
+    stack_1[int(17)] = false;
+    stack_1[int(18)] = false;
+    stack_1[int(19)] = false;
+    stack_1[int(20)] = false;
+    stack_1[int(21)] = false;
+    stack_1[int(22)] = false;
+    stack_1[int(23)] = false;
+    stack_1[int(24)] = false;
+    stack_1[int(25)] = false;
+    stack_1[int(26)] = false;
+    stack_1[int(27)] = false;
+    stack_1[int(28)] = false;
+    stack_1[int(29)] = false;
+    stack_1[int(30)] = false;
+    stack_1[int(31)] = false;
     uint i_3 = 0U;
     uint sp_4 = 0U;
     for(;;)

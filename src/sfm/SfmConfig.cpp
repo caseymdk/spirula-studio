@@ -174,8 +174,8 @@ std::string metavarFor(const std::string&, const char* name, const char* choices
     // No metavar column in the table: the flag name says what it takes, and
     // "DIR" reads better than "VALUE" on the handful that take a path.
     std::string n = name;
-    if (n.find("dir") != std::string::npos || n == "masks" || n == "images" ||
-        n == "features" || n == "resume")
+    if (n.find("dir") != std::string::npos || n == "masks" || n == "feature-masks" ||
+        n == "images" || n == "features" || n == "resume")
         return "DIR";
     if (n.find("path") != std::string::npos) return "FILE";
     return "VALUE";
@@ -608,6 +608,13 @@ bool signatureRelevant(const char* name) {
 
 std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
     std::string out;
+    auto appendParams = [&](const std::vector<double>& params) {
+        char buf[32];
+        for (double p : params) {
+            std::snprintf(buf, sizeof buf, "%.17g,", p);
+            out += buf;
+        }
+    };
 #define SFM_SIG_FIELD(member, name, cmds, tier, group, lo, hi, choices, help)   \
     if (((uint32_t)(cmds) & cmd) && (tier) != Tier::Alias && signatureRelevant(name)) \
         out += std::string(name) + "=" + valueString(cfg.member) + "\n";
@@ -616,14 +623,24 @@ std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
     // Per-group lenses reach the camera setup, and so verification, without
     // being table rows: `--camera-model cam0=opencv-fisheye` and the manifest
     // both land here.
-    if (cmd & (CMD_MATCH | CMD_MAP))
+    if (cmd & (CMD_MATCH | CMD_MAP)) {
+        if (!cfg.camera.params.empty()) {
+            out += "camera-params=";
+            appendParams(cfg.camera.params);
+            out += "\n";
+        }
         for (const CameraOverride& o : cfg.camera.overrides) {
             out += "override " + o.prefix + "=";
             if (o.has_model) out += camInfo(o.model).cli_name;
             if (o.has_focal) out += "," + valueString(o.focal);
             for (double e : o.extra) out += "," + valueString(e);
+            if (!o.params.empty()) {
+                out += ";params=";
+                appendParams(o.params);
+            }
             out += "\n";
         }
+    }
     // A sequence adds its temporal window to the pair list.
     if (cmd & (CMD_MATCH | CMD_MAP))
         for (const SequenceDef& d : cfg.sequences) {

@@ -2,28 +2,17 @@
 
 // DatasetPrep -- everything between "the user picked a video or a folder of
 // photos" and "there is an image directory (and maybe a mask directory) ready
-// for structure-from-motion".
+// for structure-from-motion": frame extraction and selection, splitting
+// multi-lens captures, AI masking, and the resume rules. Both dataset paths --
+// the built-in SfM and the external COLMAP -- run it first.
 //
-// It was the half of ColmapRunner that had nothing to do with COLMAP: frame
-// extraction, sharpest-frame selection, splitting a multi-track 360 file into
-// one folder per lens, AI masking, and the resume rules that let an
-// interrupted run reuse what it left behind. Both dataset paths -- the
-// built-in SfM and the external COLMAP -- run it first, so a change to how
-// frames are chosen cannot apply to only one of them.
-//
-// Each stage has a built-in implementation and an external fallback:
-//
-//   frames   in-process VK_KHR_video_decode_* (SS_ENABLE_PATENTED)
-//            -> ffmpeg subprocess
-//   masks    in-process SAM 2 / SAM 3          (SS_BUILD_SAM)
-//            -> python + reference/scripts/mask.py
-//
-// The built-in path is the default when it is compiled in and the device
-// supports it; the fallback is picked automatically otherwise, and can be
-// forced (a codec the driver cannot decode, an HDR transfer ffmpeg handles
-// better). `Backends` reports what this build and this machine can actually
-// do, so the GUI can say so instead of failing at run time.
+// Frames decode in-process (SS_ENABLE_PATENTED) or through ffmpeg, which can
+// be forced for a codec the driver cannot decode or an HDR transfer ffmpeg
+// handles better. Masks come from SAM 2 / SAM 3 in-process (SS_BUILD_SAM);
+// without it only the fixed-area stencil applies. `Backends` says which, so
+// the GUI can say so instead of failing at run time.
 
+#include "app/FfmpegVideo.h"
 #include "app/FrameLook.h"
 #include "app/FrameMask.h"
 #include "app/Pano360.h"
@@ -156,6 +145,9 @@ struct PrepInput {
     // a folder (app::packed_lens_count); two are cut apart into cam0/, cam1/.
     // 0 = not such an input, or not measured yet.
     int packed_lenses = 0;
+    // The folder holds HEIC photos, which nothing downstream reads: they are
+    // converted whatever the import mode, so it cannot be read in place.
+    bool heif = false;
     // Areas of the frame that are never scene -- the fisheye border, a
     // watermark, the rig in shot. Per input because it describes a lens, and
     // resolved per camera folder when it asks for the border to be fitted
@@ -248,7 +240,7 @@ struct PrepJob {
 
     // The device request for built-in decoding and masking: "auto", an ordinal,
     // a name substring or "uuid:<32 hex>". Frozen at the top of run(); a bad
-    // value fails the run. External Python masking does not read this.
+    // value fails the run.
     std::string device;
 
     // ---- video extraction ----
@@ -284,6 +276,10 @@ struct PrepJob {
     bool mask_enable = false;
     std::string mask_prompt;         // "people; cars; ..."
     std::string mask_negative_prompt;
+    // What reconstruction skips and training keeps ("sky; cloud"): its own
+    // tree, feature_masks/, which SfM intersects with masks/. Needs a text
+    // model, and is run even over an input that brought its own masks.
+    std::string mask_feature_prompt;
     bool mask_keep_subject = false;  // prompt names what to KEEP, not remove
     // Share of its own size every matched object's boundary moves by before
     // the mask is written, so the PNGs on disk carry it. SIGNED as
@@ -310,15 +306,11 @@ struct PrepJob {
     // its own, and run() refuses the job rather than half-mask the capture.
     std::vector<MaskClick> mask_clicks;
 
-    // Built-in: checkpoint files (ModelCache resolves them), with the text
-    // detector when one is paired. External: the name reference/scripts/mask.py understands,
-    // "" when it has none (BiRefNet).
+    // Checkpoint files (ModelCache resolves them), with the text detector when
+    // one is paired.
     std::string mask_model_path;
     std::string mask_detector_path;
     float mask_detector_threshold = 0.3f;   // sam::MaskOptions::detector_threshold
-    std::string mask_model_name = "sam2.1_hiera_large";
-    bool  force_external_masking = false;
-    std::string python_exe = "python3";
 };
 
 // The rate a row is actually extracted at (0 = every frame). A row's 0 means
@@ -377,7 +369,7 @@ inline bool all_videos_every_frame(const std::vector<PrepInput>& inputs,
 inline bool reads_photos_in_place(const std::vector<PrepInput>& inputs,
                                   PhotoImport mode) {
     return mode == PhotoImport::InPlace && inputs.size() == 1 &&
-           !inputs[0].is_video && inputs[0].packed_lenses == 0;
+           !inputs[0].is_video && inputs[0].packed_lenses == 0 && !inputs[0].heif;
 }
 
 // Where a job's images will be, before it has run: what PrepResult::image_dir
@@ -409,6 +401,9 @@ struct PrepResult {
     // only where the run handed them on untouched; what it wrote itself is in
     // the usual convention and the readers need no flag.
     bool mask_dir_flipped = false;
+    // Absolute, "" when this run asked for none: PrepJob::mask_feature_prompt's
+    // masks, for feature extraction only. Never flipped.
+    std::string feature_mask_dir;
     int  n_images = 0;
     // images/ came out holding one sub-folder per camera -- several inputs, or
     // a multi-track video -- so intrinsics must not be shared across them.
@@ -451,12 +446,9 @@ inline ReconStamp frames_stamp(const PrepJob& job) {
     return st;
 }
 
-// What this build, on this machine, can do without an external tool.
-//
-// Two strings per stage on purpose: `*_reason` names the option or the missing
-// device feature and belongs in a log or a tooltip; `*_note` is the sentence
-// shown on the screen, which should tell a user what will happen rather than
-// which CMake flag was off when the binary was made.
+// What this build can do in-process. `*_reason` names the missing option or
+// device feature, for a log or a tooltip; the screen says what happens instead
+// (`video_note`, dataset::mask_objects_need_segmentation).
 struct Backends {
     // Build-level answers only. The runtime answers (can THIS device decode?)
     // are not here: probing them creates the inference context, which must wait
@@ -466,7 +458,6 @@ struct Backends {
     std::string video_note;
     bool builtin_masking = false;
     std::string masking_reason;
-    std::string masking_note;
 };
 // What this binary was built with. Creates no device, so it is safe on the UI
 // thread and before a GPU choice exists.
@@ -502,27 +493,11 @@ inline bool has_fisheye_lens(const PrepInput& in) {
 int probe_packed_lenses(const std::string& dir);
 
 // ---- the ffmpeg fallback, for callers that are not a preparation run -------
-//
-// Everything the GUI does to a video without the built-in decoder goes through
-// an external ffmpeg, and the mask preview needs the same two answers a
-// preparation run does -- how long the capture is, and what one frame of it
-// looks like -- without running one. Only `ffmpeg_exe` is needed (ffprobe is
-// not assumed to be installed beside it): `ffmpeg -i` prints the stream table
-// on its way to complaining that no output file was named.
+// A capture's length and one frame of it, without the built-in decoder or a
+// run (app/FfmpegVideo.h).
 
-// What an external ffmpeg says about a video. A zero means it did not say.
-struct VideoFacts {
-    double duration = 0.0;    // seconds
-    double fps = 0.0;
-    long long frames = 0;     // duration * fps; the container's own count is
-                              // not printed by `ffmpeg -i`
-    int width = 0, height = 0;   // one frame, before any scaling
-    // One entry per video stream, in the order ffmpeg lists them, which is the
-    // order `[0:v:N]` and the built-in demuxer both number them by.
-    std::vector<std::pair<int, int>> tracks;
-};
-bool ffmpeg_probe_video(const std::string& ffmpeg_exe, const std::string& path,
-                        VideoFacts& out, const std::atomic<bool>& cancel);
+using app::VideoFacts;
+using app::ffmpeg_probe_video;
 
 // What one still has to reproduce of the run's own ffmpeg invocation.
 struct FfmpegStillOpts {
@@ -593,6 +568,8 @@ inline constexpr size_t kMaxCameraFolders = 64;
 // symlinks (a prepared capture's images/ is often a link into the raw one) and
 // stops at the first hit, so it is cheap enough for the UI thread.
 bool folder_has_images(const std::string& dir);
+// ... and a HEIC photo, on the same terms.
+bool folder_has_heif(const std::string& dir);
 
 // The photo extensions an input folder is indexed for.
 bool is_image_file(const std::filesystem::path& p);
@@ -624,7 +601,7 @@ bool folder_looks_like_dataset(const std::string& dir);
 struct WorkspaceState {
     bool frames = false;    // images/ this run would extract into
     bool features = false;  // features/, matches.bin, database.db -- reusable
-    bool masks = false;     // masks/ this run would generate into
+    bool masks = false;     // masks/ or feature_masks/ this run would generate into
     bool input_masks = false;  // masks an input came with (PrepInput::mask_dir)
     // A reconstruction any dataset reader can open: this run's own sparse/, or
     // the transforms.json, root-level COLMAP files or Metashape export of a
@@ -655,6 +632,10 @@ bool is_mask_folder(const std::string& path);
 // The correction editor's layer folder (app/gui/mask/MaskLayer.h), which a
 // finished dataset carries beside images/ and masks/ and which holds PNGs.
 bool is_mask_edits_folder(const std::string& path);
+
+// Where PrepJob::mask_feature_prompt's masks go, beside masks/ and mirroring it.
+inline constexpr const char* kFeatureMaskDirName = "feature_masks";
+bool is_feature_mask_folder(const std::string& path);
 
 // One counter for a whole step, rather than one per input: a job with three
 // videos in it should fill the bar once and never wind it back, which is the
@@ -746,22 +727,17 @@ private:
     bool gather_photos(const PrepJob& job, const PrepInput& in,
                        const std::string& images, const std::string& masks,
                        bool& have_masks, std::string& error);
-    // Masks for ONE input's images. Run per input rather than over the whole
-    // tree so the tracker's memory bank never crosses from one capture into the
-    // next, and so clicks reach only the input they were drawn on.
-    //
-    // `folded` comes back true when the input's stencil was intersected into
-    // the masks as they were produced, which is what lets apply_stencil be
-    // skipped -- it would otherwise decode and re-encode every mask again.
+    // ONE input's masks, so a memory bank or a click never crosses captures.
+    // `folded`: its stencil went in as they were made, sparing apply_stencil a
+    // re-encode. `train` false writes only `feature_masks` ("" for none).
     bool generate_masks(const PrepJob& job, const PrepInput& in,
-                        const std::string& images, const std::string& images_rel,
-                        const std::string& masks, const std::string& masks_rel,
+                        const std::string& images, const std::string& masks,
+                        const std::string& feature_masks, bool train,
                         bool& folded, std::string& error);
     bool generate_masks_builtin(const PrepJob& job, const PrepInput& in,
                                 const std::string& images, const std::string& masks,
+                                const std::string& feature_masks, bool train,
                                 bool& folded, std::string& error);
-    bool generate_masks_python(const PrepJob& job, const std::string& images_rel,
-                               const std::string& masks_rel, std::string& error);
     // The static stencil on its own, for the masks segmentation did not make.
     // `merge_from` names the masks it folds in when they are not the ones it
     // writes -- the tree the photos arrived with; "" is `masks` itself.

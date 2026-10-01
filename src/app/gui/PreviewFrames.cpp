@@ -4,11 +4,12 @@
 
 #include "app/FrameMask.h"
 #include "app/gui/DatasetPrep.h"
+#include "app/gui/HeifPhoto.h"
 #include "app/gui/Subprocess.h"
 #include "i18n/catalog/Dataset.h"
 
 #include "core/ColorSpace.h"
-#include "core/ExrImage.h"
+#include "core/ImageFile.h"
 #ifdef SS_HAVE_VIDEO
 #include "app/FrameExtract.h"
 #include "video/Video.h"
@@ -54,11 +55,17 @@ void crop_packed(const PreviewSource& src, int folder, int& w, int h,
 }
 
 bool load_photo(const PreviewSource& src, const std::string& path,
-                int& w, int& h, std::vector<uint8_t>& rgb, int folder) {
-    if (exr::is_exr(path)) {
-        exr::Info info;
-        if (!exr::decode_srgb8(path, exr::Options(), info, rgb,
-                               src.image_gamut, src.image_is_linear).empty())
+                int& w, int& h, std::vector<uint8_t>& rgb, int folder,
+                const std::atomic<bool>& cancel, std::string& error) {
+    if (is_heif_path(path)) {
+        if (!load_heif(path, src.builtin_decode, src.ffmpeg_exe, w, h, rgb, cancel,
+                       error))
+            return false;
+        convert_to_srgb(src, rgb);
+    } else if (imagefile::handles(path)) {
+        imagefile::Info info;
+        if (!imagefile::decode_srgb8(path, imagefile::Options(), info, rgb,
+                                     src.image_gamut, src.image_is_linear).empty())
             return false;
         w = info.width;
         h = info.height;
@@ -205,9 +212,19 @@ bool load_preview_frame(const PreviewSource& src, const PreviewFrame& frame,
         return false;
     }
     if (!src.is_video) {
+#ifdef SS_BUILD_SAM
+        if (src.builtin_decode && is_heif_path(frame.path)) {
+            std::string select_error;
+            if (!sam::freeze_device(src.device, select_error)) {
+                error = select_error;
+                return false;
+            }
+        }
+#endif
+        std::string why;
         if (frame.path.empty() ||
-            !load_photo(src, frame.path, w, h, rgb, folder)) {
-            error = dmsg::preview_frame_unreadable.get();
+            !load_photo(src, frame.path, w, h, rgb, folder, cancel, why)) {
+            error = why.empty() ? dmsg::preview_frame_unreadable.get() : why;
             return false;
         }
         return true;

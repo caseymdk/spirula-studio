@@ -27,7 +27,7 @@ struct DatasetSettings {
     ColmapJob colmap;
     MaskSettings mask;               // clicks excluded -- see the header note
     std::string mask_model_id = "sam2.1-base-plus";
-    std::string mask_detector_id = "gdino-tiny";   // a TextDetector, ModelCache.h
+    std::string mask_detector_id = "gdino-base";   // a TextDetector, ModelCache.h
     bool use_found_masks = true;
     bool border_enable = false;
     // A saved stencil's name (StencilPreset.h), drawn on every input.

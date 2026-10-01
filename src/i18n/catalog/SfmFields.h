@@ -685,6 +685,49 @@ SS_MSG(flip_mask_help,
     TR("Her maskede korunanla yok sayılanı yer değiştirir; korunacak alan yerine "
        "KALDIRILACAK alanı boyayan dışa aktarma araçları için"));
 
+SS_MSG(feature_masks_help,
+    EN("A second directory of masks, intersected with --masks: keypoints are "
+       "kept only where both are nonzero. For what the reconstruction should "
+       "not use but training should, such as the sky. Never flipped"),
+    JA("2 つ目のマスクのディレクトリで、--masks と重ね合わせます。キーポイントは"
+       "両方が 0 でない画素にあるものだけが残ります。空のように、再構成には使わない"
+       "が学習には使うものに向けたものです。反転はしません"),
+    ZH_HANS("第二个掩码目录，与 --masks 取交集：只有两者都不为 0 的像素上的关键点"
+            "会被保留。用于重建不该用、训练却要用的区域，例如天空。不会被反转"),
+    ZH_HANT("第二個遮罩目錄，與 --masks 取交集：只有兩者都不為 0 的像素上的關鍵點"
+            "會被保留。用於重建不該用、訓練卻要用的區域，例如天空。不會被反轉"),
+    KO("두 번째 마스크 디렉터리로, --masks 와 교집합을 씁니다. 키포인트는 둘 다 "
+       "0 이 아닌 화소에서만 남습니다. 하늘처럼 재구성에는 쓰지 않지만 학습에는 "
+       "쓰는 영역을 위한 것입니다. 뒤집지 않습니다"),
+    DE("Ein zweites Maskenverzeichnis, mit --masks geschnitten: Schlüsselpunkte "
+       "bleiben nur, wo beide ungleich null sind. Für das, was die Rekonstruktion "
+       "nicht nutzen soll, das Training aber schon, etwa den Himmel. Wird nie "
+       "invertiert"),
+    FR("Un second dossier de masques, croisé avec --masks : les points clés ne "
+       "restent que là où les deux sont non nuls. Pour ce que la reconstruction ne "
+       "doit pas utiliser mais l'entraînement si, comme le ciel. Jamais inversé"),
+    ES("Una segunda carpeta de máscaras, intersecada con --masks: los puntos "
+       "clave solo quedan donde ambas son distintas de cero. Para lo que la "
+       "reconstrucción no debe usar pero el entrenamiento sí, como el cielo. "
+       "Nunca se invierte"),
+    PT("Uma segunda pasta de máscaras, intersectada com --masks: os pontos-chave "
+       "só ficam onde ambas são diferentes de zero. Para o que a reconstrução não "
+       "deve usar mas o treino sim, como o céu. Nunca é invertida"),
+    IT("Una seconda cartella di maschere, intersecata con --masks: i punti chiave "
+       "restano solo dove entrambe sono diverse da zero. Per ciò che la "
+       "ricostruzione non deve usare ma l'addestramento sì, come il cielo. Mai "
+       "invertita"),
+    NL("Een tweede map met maskers, gesneden met --masks: sleutelpunten blijven "
+       "alleen waar beide niet nul zijn. Voor wat de reconstructie niet moet "
+       "gebruiken maar de training wel, zoals de lucht. Wordt nooit omgekeerd"),
+    RU("Второй каталог масок, пересекаемый с --masks: ключевые точки остаются "
+       "только там, где обе маски ненулевые. Для того, что реконструкции брать не "
+       "нужно, а обучению нужно, например неба. Никогда не инвертируется"),
+    TR("--masks ile kesiştirilen ikinci bir maske dizini: anahtar noktalar yalnızca "
+       "ikisinin de sıfır olmadığı yerde kalır. Gökyüzü gibi, yeniden yapılandırmanın "
+       "kullanmaması ama eğitimin kullanması gereken alanlar için. Asla ters "
+       "çevrilmez"));
+
 SS_MSG(mask_dir_help,
     EN("Alias of --masks"),
     JA("--masks の別名"),

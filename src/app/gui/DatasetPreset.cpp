@@ -48,6 +48,7 @@ namespace {
     X("mask_text_detector",         mask_detector_id)                         \
     X("mask_prompt",                mask.prompt)                              \
     X("mask_negative_prompt",       mask.negative_prompt)                     \
+    X("mask_feature_prompt",        mask.feature_prompt)                      \
     X("mask_keep_subject",          mask.keep_subject)                        \
     X("mask_dilate_ratio",          mask.dilate_ratio)                        \
     X("mask_shrink_ratio",          mask.shrink_ratio)                        \
@@ -58,7 +59,6 @@ namespace {
     X("mask_memory",                sfm.prep.mask_memory)                     \
     X("mask_detect_every",          sfm.prep.mask_detect_every)               \
     X("mask_memory_frames",         sfm.prep.mask_memory_frames)              \
-    X("force_external_masking",     sfm.prep.force_external_masking)          \
     /* ---- depth and normals ---- */                                         \
     X("geometry_enable",            sfm.geometry.enable)                      \
     X("geometry_model",             sfm.geometry.model)                       \
@@ -71,6 +71,7 @@ namespace {
     X("geometry_depth_mm",          sfm.geometry.depth_mm)                    \
     X("geometry_ray_depth",         sfm.geometry.ray_depth)                   \
     X("geometry_split",             sfm.geometry.split)                       \
+    X("geometry_face_res",          sfm.geometry.face_res)                    \
     X("geometry_overwrite",         sfm.geometry.overwrite)                   \
     /* ---- the built-in reconstruction ---- */                               \
     X("sfm_quality",                sfm.quality)                              \
@@ -172,6 +173,9 @@ bool dataset_apply_preset(DatasetSettings& s, const std::string& name) {
         // whatever they carry and their shadow.
         s.sfm.prep.mask_enable = true;
         s.mask.prompt = "person; hand; backpack; shadow of person";
+        // Outdoors half of every frame is sky, and a clear one yields no
+        // feature points while a cloudy one yields points that drift.
+        s.mask.feature_prompt = "sky; cloud";
         s.sfm.mask_features = true;
         s.border_enable = true;
         return true;
@@ -226,6 +230,7 @@ void sanitize_dataset_settings(DatasetSettings& s) {
     clamp_to(g.jpeg_quality, 1, 100);
     clamp_to(g.ray_depth, 0, 2);
     clamp_to(g.split, 0, 2);
+    clamp_to(g.face_res, 0, 1);
 
     SfmJob& j = s.sfm;
     clamp_to(j.quality, 0, 3);

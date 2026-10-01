@@ -9,6 +9,8 @@
 #include "core/ExrImage.h"
 
 #include "core/ColorSpace.h"
+#include "core/HalfFloat.h"
+#include "core/MappedFile.h"
 #include "external/miniz.h"
 
 #include <algorithm>
@@ -21,15 +23,6 @@
 #include <mutex>
 #include <optional>
 #include <thread>
-
-#if defined(_WIN32)
-#  include <windows.h>
-#else
-#  include <fcntl.h>
-#  include <sys/mman.h>
-#  include <sys/stat.h>
-#  include <unistd.h>
-#endif
 
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #  error "core/ExrImage.cpp reads EXR words in host order; the host must be little-endian"
@@ -74,32 +67,6 @@ inline int num_samples(int s, int a, int b) {
     return s == 1 ? b - a + 1 : divp(b, s) - divp(a, s) + 1;
 }
 
-// 256 KB, built once. Real scene-linear captures are full of subnormals, and
-// the branchy bit-twiddle conversion measures slower on them than the table.
-const float* half_table() {
-    static const std::vector<float> table = [] {
-        std::vector<float> t(65536);
-        for (uint32_t h = 0; h < 65536; h++) {
-            const uint32_t sign = (h & 0x8000u) << 16;
-            uint32_t e = (h >> 10) & 0x1fu, m = h & 0x3ffu, bits;
-            if (e == 0 && m == 0) {
-                bits = sign;
-            } else if (e == 0) {
-                e = 1;
-                while (!(m & 0x400u)) { m <<= 1; e--; }
-                bits = sign | ((e + 112u) << 23) | ((m & 0x3ffu) << 13);
-            } else if (e == 31) {
-                bits = sign | 0x7f800000u | (m << 13);
-            } else {
-                bits = sign | ((e + 112u) << 23) | (m << 13);
-            }
-            std::memcpy(&t[h], &bits, 4);
-        }
-        return t;
-    }();
-    return table.data();
-}
-
 inline float sample_to_float(int type, const uint8_t* p, const float* halves) {
     if (type == kHalf) {
         uint16_t h;
@@ -115,85 +82,6 @@ inline float sample_to_float(int type, const uint8_t* p, const float* halves) {
     std::memcpy(&u, p, 4);
     return (float)u;
 }
-
-// ===========================================================================
-// Memory-mapped input
-// ===========================================================================
-
-class Mapped {
-public:
-    ~Mapped() { close(); }
-
-    std::string open(const std::string& path) {
-#if defined(_WIN32)
-        _file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (_file == INVALID_HANDLE_VALUE) return "cannot open the file";
-        LARGE_INTEGER sz;
-        if (!GetFileSizeEx(_file, &sz) || sz.QuadPart <= 0) {
-            close();
-            return "the file is empty";
-        }
-        _size = (size_t)sz.QuadPart;
-        _mapping = CreateFileMappingA(_file, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        if (_mapping)
-            _data = (const uint8_t*)MapViewOfFile(_mapping, FILE_MAP_READ, 0, 0, 0);
-#else
-        _fd = ::open(path.c_str(), O_RDONLY);
-        if (_fd < 0) return "cannot open the file";
-        struct stat st;
-        if (fstat(_fd, &st) != 0 || st.st_size <= 0) {
-            close();
-            return "the file is empty";
-        }
-        _size = (size_t)st.st_size;
-        void* p = mmap(nullptr, _size, PROT_READ, MAP_PRIVATE, _fd, 0);
-        if (p != MAP_FAILED) _data = (const uint8_t*)p;
-#endif
-        if (!_data) {
-            _fallback.resize(_size);
-            FILE* f = std::fopen(path.c_str(), "rb");
-            if (!f) { close(); return "cannot open the file"; }
-            const size_t got = std::fread(_fallback.data(), 1, _size, f);
-            std::fclose(f);
-            if (got != _size) { close(); return "the file was truncated while reading"; }
-            _data = _fallback.data();
-        }
-        return "";
-    }
-
-    const uint8_t* data() const { return _data; }
-    size_t size() const { return _size; }
-
-private:
-    void close() {
-        const bool mapped = _data && _fallback.empty();
-#if defined(_WIN32)
-        if (mapped) UnmapViewOfFile((LPCVOID)_data);
-        if (_mapping) CloseHandle(_mapping);
-        if (_file != INVALID_HANDLE_VALUE) CloseHandle(_file);
-        _mapping = nullptr;
-        _file = INVALID_HANDLE_VALUE;
-#else
-        if (mapped) munmap((void*)_data, _size);
-        if (_fd >= 0) ::close(_fd);
-        _fd = -1;
-#endif
-        _data = nullptr;
-        _size = 0;
-        _fallback.clear();
-    }
-
-    const uint8_t* _data = nullptr;
-    size_t _size = 0;
-    std::vector<uint8_t> _fallback;
-#if defined(_WIN32)
-    HANDLE _file = INVALID_HANDLE_VALUE;
-    HANDLE _mapping = nullptr;
-#else
-    int _fd = -1;
-#endif
-};
 
 // ===========================================================================
 // Header
@@ -1079,7 +967,7 @@ size_t tile_table_size(const Part& part) {
 using RowSink = std::function<void(int y, int x0, int n, const float* px)>;
 
 struct Decoder {
-    Mapped map;
+    spirula::MappedFile map;
     Part part;
     Selection sel;
     Info info;
@@ -1226,7 +1114,7 @@ std::string Decoder::read_offsets(Reader& r) {
 }
 
 void Decoder::emit_rows(const Rect& rect, const uint8_t* blk, Scratch& s) {
-    const float* halves = half_table();
+    const float* halves = spirula::half_to_float_table();
     const int w = info.width;
     const int x0 = std::max(rect.x0, part.px0);
     const int x1 = std::min(rect.x1, part.px1);
@@ -1412,32 +1300,6 @@ std::string Decoder::run(int threads) {
     return first;
 }
 
-// Exact 8-bit quantization of linear_to_srgb: thresh[c] is the linear value at
-// which the code steps to c+1, so the search cannot disagree with the curve.
-const float* srgb_thresholds() {
-    static const std::vector<float> t = [] {
-        std::vector<float> v(255);
-        for (int c = 0; c < 255; c++)
-            v[(size_t)c] = colorspace::srgb_to_linear((c + 0.5f) / 255.0f);
-        return v;
-    }();
-    return t.data();
-}
-
-inline uint8_t quantize_srgb(const float* t, float x) {
-    int lo = 0, hi = 255;
-    while (lo < hi) {
-        const int m = (lo + hi + 1) >> 1;
-        if (x >= t[m - 1]) lo = m;
-        else               hi = m - 1;
-    }
-    return (uint8_t)lo;
-}
-
-inline uint8_t quantize_unit(float x) {
-    return (uint8_t)std::lround(std::min(std::max(x, 0.0f), 1.0f) * 255.0f);
-}
-
 }  // namespace
 
 
@@ -1500,37 +1362,15 @@ std::string decode_srgb8(const std::string& path, const Options& opt, Info& info
     d.out_channels = opt.channels;
     info = d.info;
 
-    const std::string g = gamut.empty() ? d.info.gamut : gamut;
-    const bool linear = is_linear.value_or(d.info.is_linear);
-    const colorspace::Mat3 m = colorspace::gamut_to_rec709(g);
-    const bool identity = colorspace::is_identity(g, linear);
-
+    const colorspace::Srgb8Encoder enc(gamut.empty() ? d.info.gamut : gamut,
+                                       is_linear.value_or(d.info.is_linear));
     const size_t w = (size_t)d.info.width, h = (size_t)d.info.height;
     out.resize(w * h * (size_t)opt.channels);
     if (!d.covers_display()) std::fill(out.begin(), out.end(), (uint8_t)0);
     const int nc = opt.channels;
-    const float* thresh = srgb_thresholds();
     uint8_t* dst = out.data();
-    // A single channel is achromatic, and every gamut here maps white to
-    // white, so the matrix drops out and only the transfer is left.
-    d.sink = [&, dst, w, nc](int y, int x0, int n, const float* px) {
-        uint8_t* o = dst + ((size_t)y * w + (size_t)x0) * (size_t)nc;
-        for (int i = 0; i < n; i++, px += nc, o += nc) {
-            if (nc == 1) {
-                o[0] = linear ? quantize_srgb(thresh, px[0]) : quantize_unit(px[0]);
-                continue;
-            }
-            if (identity) {
-                for (int c = 0; c < 3; c++) o[c] = quantize_unit(px[c]);
-            } else {
-                float v[3] = {px[0], px[1], px[2]};
-                if (!linear)
-                    for (int c = 0; c < 3; c++) v[c] = colorspace::srgb_to_linear(v[c]);
-                colorspace::apply3x3(m, v);
-                for (int c = 0; c < 3; c++) o[c] = quantize_srgb(thresh, v[c]);
-            }
-            if (nc == 4) o[3] = quantize_unit(px[3]);
-        }
+    d.sink = [&enc, dst, w, nc](int y, int x0, int n, const float* px) {
+        enc(px, dst + ((size_t)y * w + (size_t)x0) * (size_t)nc, (size_t)n, nc);
     };
     return d.run(opt.threads);
 }

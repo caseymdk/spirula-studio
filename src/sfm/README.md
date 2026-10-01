@@ -280,6 +280,7 @@ spirula sfm auto IMAGES/ -o WORKSPACE/          # images -> sparse model
 spirula sfm auto -o ws/                         # ./images + ./masks, all defaults
 spirula sfm auto IMAGES/ -o ws/ --data-type video --quality medium
 spirula sfm auto IMAGES/ -o ws/ --masks MASKS/  # drop keypoints on masked pixels
+spirula sfm auto IMAGES/ -o ws/ --masks MASKS/ --feature-masks SKY/   # ... on either
 spirula sfm auto IMAGES/ -o ws/ --camera-model opencv-fisheye
 
 spirula sfm extract IMAGES/ -o feats/
@@ -297,6 +298,33 @@ their defaults and worked examples, and `spirula sfm --version` prints the
 package version. A usage error names the flag, says what was wrong with it and
 points at `--help`; it always exits 1, because `auto` spends exit codes 2 and 3
 on *the reconstruction* being absent or partial.
+
+A manifest camera can provide complete calibrated intrinsics in `params`, using
+the named model's COLMAP parameter order and the original image's pixel units:
+
+```yaml
+cameras:
+  - prefix: cam0
+    model: opencv-fisheye
+    params: [900, 910, 1200, 1190, 0.1, -0.02, 0.003, -0.0004]
+```
+
+For `opencv-fisheye` the order is `fx, fy, cx, cy, k1, k2, k3, k4`.
+`params` requires an explicit model and cannot share an entry with `focal` or
+`distortion`. It initializes matching and mapping without recentering or making
+the focal lengths equal; feature extraction downscaling does not change its
+pixel units. Existing CLI camera overrides retain precedence. Bundle adjustment
+still refines focal lengths; `--no-refine-extra-params --no-final-extra-params`
+holds distortion and the principal point at their supplied values.
+
+A DJI Avata 360 `.OSV` named by `--telemetry` or a manifest capture supplies
+the same thing unasked: its clip header holds each lens's factory calibration,
+and `cam0`/`cam1` (tracks 0 and 1) get it as a `params` entry in the run's
+fisheye model, refitted from the lens's five radial terms to four. Any camera
+setting that covers a lens folder, from the command line or the manifest, wins
+instead; the `[run]` lines say which lens got what. `--sensor-gauge none` does not
+turn it off. Field map and measurements:
+`docs/notes/imu-gps-for-sfm.md` §2.3.
 
 Every line a default run prints is **localized**, in the language `--lang`,
 `SS_LANG` or the OS says, and carries a translated stage tag padded to a common

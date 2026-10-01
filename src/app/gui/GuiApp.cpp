@@ -18,6 +18,7 @@
 #include "app/gui/Subprocess.h"
 #include "mesh/MeshImport.h"
 #include "app/gui/Ui.h"
+#include "app/gui/VramForecastView.h"
 
 #include "i18n/Locale.h"
 #include "i18n/catalog/Brand.h"
@@ -379,7 +380,6 @@ void GuiApp::load_settings() {
             _model_recents.push_back(v);
         else if (k == "colmap_exe" && !v.empty()) _colmap_exe = v;
         else if (k == "ffmpeg_exe" && !v.empty()) _ffmpeg_exe = v;
-        else if (k == "python_exe" && !v.empty()) _python_exe = v;
         else if (k == "sfm_engine") _engine = v == "colmap" ? Engine::Colmap
                                                             : Engine::BuiltIn;
         else if (k == "batch_command") _batch_cmd = unescape_setting(v);
@@ -431,7 +431,6 @@ void GuiApp::save_settings() {
         std::fprintf(f, "recent_model=%s\n", r.c_str());
     std::fprintf(f, "colmap_exe=%s\n", _colmap_exe.c_str());
     std::fprintf(f, "ffmpeg_exe=%s\n", _ffmpeg_exe.c_str());
-    std::fprintf(f, "python_exe=%s\n", _python_exe.c_str());
     std::fprintf(f, "sfm_engine=%s\n",
                  _engine == Engine::Colmap ? "colmap" : "builtin");
     std::fprintf(f, "batch_command=%s\n", escape_setting(_batch_cmd).c_str());
@@ -675,7 +674,6 @@ void GuiApp::write_run_settings(std::ofstream& f) {
     line("ba_cpu", cfg_str(j.ba_cpu));
     line("subprocess", cfg_str(j.subprocess));
     line("force_external_decode", cfg_str(j.prep.force_external_decode));
-    line("force_external_masking", cfg_str(j.prep.force_external_masking));
     line("video_fps", cfg_str(j.prep.video_fps));
     line("adaptive_fps", cfg_str(j.prep.adaptive_fps));
     if (j.prep.adaptive_fps) line("adaptive_range", cfg_str(j.prep.adaptive_range));
@@ -701,6 +699,7 @@ void GuiApp::write_run_settings(std::ofstream& f) {
     line("want_depth", cfg_str(_geometry.want_depth));
     line("want_normal", cfg_str(_geometry.want_normal));
     line("max_size", std::to_string(_geometry.max_size));
+    line("face_res", _geometry.face_res == 1 ? "source" : "output");
 
     // The training config, grouped the way the options editor groups it.
     for (int si = 0; si < kTrainNumSections; si++) {
@@ -777,6 +776,7 @@ void GuiApp::apply_preset(const std::string& preset) {
     // Keep GUI-managed context across preset switches.
     fresh.data = _cfg.data;
     fresh.image_dir = _cfg.image_dir;
+    fresh.seed_pointcloud = _cfg.seed_pointcloud;
     fresh.output_dir_prefix = _cfg.output_dir_prefix;
     fresh.output_dir_name = _cfg.output_dir_name;
     // The native viewport replaces the web viewer by default; it can be
@@ -938,7 +938,7 @@ void GuiApp::apply_dataset_settings(const DatasetSettings& in) {
     _resume = s.sfm.prep.resume;
     _photo_import = s.sfm.prep.photo_import;
     _flip_found_masks = s.sfm.prep.flip_found_masks;
-    _mask_enable = s.sfm.prep.mask_enable;
+    _mask_enable = s.sfm.prep.mask_enable && backends().builtin_masking;
     _mask_memory = s.sfm.prep.mask_memory;
     _mask_detect_every = s.sfm.prep.mask_detect_every;
     _mask_memory_frames = s.sfm.prep.mask_memory_frames;
@@ -2381,8 +2381,8 @@ void GuiApp::add_existing_dataset(const std::string& dir) {
 // What this run draws on its inputs, kept in the output folder for next time.
 void GuiApp::save_run_stencils() {
     if (!_border_enable || _workspace.empty()) return;
-    std::vector<std::pair<std::string, std::vector<app::MaskShape>>> inputs;
-    for (const PrepInput& in : _sources) inputs.push_back({in.path, in.stencil.mask.shapes});
+    std::vector<std::pair<std::string, app::MaskSet>> inputs;
+    for (const PrepInput& in : _sources) inputs.push_back({in.path, app::mask_set_of(in.stencil)});
     std::string err;
     const std::vector<std::string> written = save_dataset_stencils(_workspace, inputs, err);
     if (!err.empty()) log(i18n::format(dmsg::stencil_save_failed, {err}));
@@ -2391,15 +2391,15 @@ void GuiApp::save_run_stencils() {
 
 void GuiApp::apply_frame_shapes(size_t first_input) {
     if (_frame_shapes.empty()) return;
-    std::vector<app::MaskShape> shapes;
+    app::MaskSet set;
     std::string err;
-    if (!load_stencil_preset(_frame_shapes, shapes, err)) {
+    if (!load_stencil_preset(_frame_shapes, set, err)) {
         log(i18n::format(dmsg::stencil_load_failed, {err}));
         _frame_shapes.clear();
         return;
     }
     for (size_t i = first_input; i < _sources.size(); i++)
-        _sources[i].stencil.mask.shapes = shapes;
+        app::apply_mask_set(_sources[i].stencil, set);
 }
 
 // A folder of EXRs declares its own colour space, and the picker for it is
@@ -2447,6 +2447,7 @@ const char* GuiApp::dir_key(PickAction a, FileDialog::Mode m) {
         case PickAction::RenderAddModel:
         case PickAction::MeshSource:        return "model";
         case PickAction::StencilFile:       return "stencil";
+        case PickAction::SeedPointcloud:    return "seed_pointcloud";
         case PickAction::RenderProjectSave:
         case PickAction::RenderProjectOpen: return "render_project";
         case PickAction::RenderOutput:      return "render_output";
@@ -2463,6 +2464,7 @@ const char* GuiApp::dir_key(PickAction a, FileDialog::Mode m) {
         case PickAction::BatchDatasetPresetFile:
         case PickAction::BatchMeshPresetFile: return "preset";
         case PickAction::MaskModelFile:
+        case PickAction::ConfigPath:
         case PickAction::None:              return "";
     }
     return "";
@@ -2480,7 +2482,10 @@ void GuiApp::open_pick(PickAction a, const std::string& title,
                        const std::string& start_dir, bool multi,
                        const std::string& suggested_name) {
     _pick = a;
-    _pick_key = dir_key(a, mode);
+    // One remembered folder per flag: a run to resume and a region JSON do
+    // not live in the same place.
+    _pick_key = a == PickAction::ConfigPath ? "train." + _pick_field
+                                            : dir_key(a, mode);
     std::string dir = start_dir;
     if (dir.empty()) {
         auto it = _dialog_dirs.find(_pick_key);
@@ -2548,6 +2553,17 @@ void GuiApp::handle_dialog_result(const std::vector<std::string>& paths) {
         case PickAction::MeshSource:
             set_mesh_source(path);
             break;
+        case PickAction::SeedPointcloud:
+            _cfg.seed_pointcloud = path;
+            _cfg_ui.touched.insert("seed_pointcloud");
+            _parse_dirty = true;
+            break;
+        case PickAction::ConfigPath: {
+            const TrainConfig before = _cfg;
+            apply_path_pick(_cfg, _cfg_ui, _pick_field, path);
+            if (!parse_settings_equal(before, _cfg)) _parse_dirty = true;
+            break;
+        }
         case PickAction::StencilFile:
             if (_segment.is_open() && _mask_preview_input < (int)_sources.size())
                 _segment.load_file(_sources[(size_t)_mask_preview_input].stencil, path);
@@ -2742,7 +2758,9 @@ std::string GuiApp::state_json() {
     out += kDownload[(int)_download.state()];
     out += "\",\"license_prompt\":" + quoted(_license_prompt);
     // Index order is the declaration order of mask::CanvasMode.
-    static const char* kCanvasModes[] = {"shape", "eraser", "path", "sam"};
+    static const char* kCanvasModes[] = {"shape", "eraser", "path", "pen", "sam"};
+    static_assert(sizeof(kCanvasModes) / sizeof(kCanvasModes[0]) == (size_t)mask::CanvasMode::Sam + 1,
+                  "one name per mask::CanvasMode");
     const mask::MaskDoc* mdoc = _mask_editor.doc();
     out += ",\"mask_editor_mode\":\"";
     out += kCanvasModes[(int)_mask_editor.mode()];
@@ -2778,6 +2796,7 @@ std::string GuiApp::state_json() {
            std::to_string(_mask_editor.sam_click_y()) + "]";
     out += ",\"mask_editor_canvas_h\":" + std::to_string(_mask_editor.canvas_height());
     out += ",\"mask_editor_anchors\":" + std::to_string(_mask_editor.path_anchors());
+    out += ",\"mask_editor_pen_anchors\":" + std::to_string(_mask_editor.pen_anchors());
     out += ",\"sam_margin\":" + std::to_string(_mask_editor.sam_margin());
     out += ",\"mask_dilate_ratio\":" + std::to_string(_mask.dilate_ratio);
     // The dataset screen's clicked objects, which no editor click may reach,
@@ -3353,8 +3372,7 @@ void GuiApp::request_model_download(const std::string& id, const std::string& de
 // download, not something the run can do anything about, so it is asked before
 // starting rather than reported twenty minutes in.
 bool GuiApp::mask_model_missing() const {
-    if (!_mask_enable || _sfm_job.prep.force_external_masking) return false;
-    if (!backends().builtin_masking) return false;
+    if (!_mask_enable) return false;
     // Inputs that arrived with their own masks are never segmented, so a job
     // made only of those needs no model at all.
     bool all_bring_masks = !_sources.empty();
@@ -3398,7 +3416,6 @@ void GuiApp::sync_dataset_jobs() {
     prep.force_external_decode = _sfm_job.prep.force_external_decode;
     prep.sync_tracks = _sfm_job.prep.sync_tracks;
     prep.ffmpeg_exe = _ffmpeg_exe;
-    prep.python_exe = _python_exe;
     prep.mask_enable = _mask_enable;
     prep.flip_found_masks = _use_found_masks && _flip_found_masks;
     prep.photo_import = _photo_import;
@@ -3406,6 +3423,7 @@ void GuiApp::sync_dataset_jobs() {
     const MaskModelFiles mask_model = selected_mask_model();
     prep.mask_prompt = mask_model.text ? _mask.prompt : "";
     prep.mask_negative_prompt = mask_model.text ? _mask.negative_prompt : "";
+    prep.mask_feature_prompt = mask_model.text ? _mask.feature_prompt : "";
     prep.mask_keep_subject = _mask.keep_subject;
     prep.mask_max_image_size = _mask.max_image_size;
     prep.mask_dilate_ratio = _mask.boundary_ratio();
@@ -3418,9 +3436,6 @@ void GuiApp::sync_dataset_jobs() {
     prep.mask_model_path = mask_model.model;
     prep.mask_detector_path = mask_model.detector;
     prep.mask_detector_threshold = _mask.box_threshold;
-    prep.force_external_masking = _sfm_job.prep.force_external_masking;
-    if (const ModelEntry* e = find_model(_model_id))
-        prep.mask_model_name = e->legacy_name;
     // The one frozen choice, re-applied here because this function rebuilds
     // prep from panel state and would otherwise drop it. Empty before the
     // freeze, which is exactly what an unstarted job wants.
@@ -3441,13 +3456,12 @@ void GuiApp::sync_dataset_jobs() {
     _colmap_job.max_frames = prep.max_frames;
     _colmap_job.force_external_decode = prep.force_external_decode;
     _colmap_job.photo_import = prep.photo_import;
-    _colmap_job.force_external_masking = prep.force_external_masking;
     _colmap_job.colmap_exe = _colmap_exe;
     _colmap_job.ffmpeg_exe = _ffmpeg_exe;
-    _colmap_job.python_exe = _python_exe;
     _colmap_job.mask_enable = prep.mask_enable;
     _colmap_job.mask_prompt = prep.mask_prompt;
     _colmap_job.mask_negative_prompt = prep.mask_negative_prompt;
+    _colmap_job.mask_feature_prompt = prep.mask_feature_prompt;
     _colmap_job.mask_keep_subject = prep.mask_keep_subject;
     _colmap_job.mask_max_image_size = prep.mask_max_image_size;
     _colmap_job.mask_dilate_ratio = prep.mask_dilate_ratio;
@@ -3460,7 +3474,6 @@ void GuiApp::sync_dataset_jobs() {
     _colmap_job.mask_model_path = prep.mask_model_path;
     _colmap_job.mask_detector_path = prep.mask_detector_path;
     _colmap_job.mask_detector_threshold = prep.mask_detector_threshold;
-    _colmap_job.mask_model = prep.mask_model_name;
 
     _sfm_job.prep.redo_frames = _colmap_job.redo_frames = _redo_frames;
     _sfm_job.prep.redo_masks = _colmap_job.redo_masks = _redo_masks;
@@ -3581,7 +3594,7 @@ namespace {
 // Built by hand rather than with ui::Combo for the same reason as the lens
 // pickers: what each row costs is the whole of the question, and one tooltip
 // on the closed combo cannot answer it row by row.
-void photo_import_combo(PhotoImport* mode, bool several_inputs) {
+void photo_import_combo(PhotoImport* mode, bool no_in_place) {
     const std::vector<const Msg*> labels{
         &dmsg::photo_import_convert, &dmsg::photo_import_copy,
         &dmsg::photo_import_move, &dmsg::photo_import_inplace};
@@ -3593,7 +3606,7 @@ void photo_import_combo(PhotoImport* mode, bool several_inputs) {
     if (ui::BeginCombo(dmsg::photo_import, labels[(size_t)idx]->get())) {
         for (int i = 0; i < kNumPhotoImports; i++) {
             const bool blocked =
-                several_inputs && (PhotoImport)i == PhotoImport::InPlace;
+                no_in_place && (PhotoImport)i == PhotoImport::InPlace;
             ImGui::BeginDisabled(blocked);
             if (ui::Selectable(*labels[(size_t)i], i == idx))
                 *mode = (PhotoImport)i;
@@ -3863,7 +3876,8 @@ void GuiApp::draw_dataset_source() {
             ui::help_on_hover(dmsg::flip_found_masks_help);
             ImGui::Unindent();
         }
-        photo_import_combo(&_photo_import, _sources.size() > 1);
+        photo_import_combo(&_photo_import,
+                           _sources.size() > 1 || (!_sources.empty() && _sources[0].heif));
     }
 
     ImGui::SetNextItemWidth(px(-220.0f));
@@ -4757,17 +4771,25 @@ void GuiApp::draw_masking_options() {
                                    {with_masks, (int)_sources.size()});
     }
 
+    ImGui::BeginDisabled(!backends().builtin_masking);
     ui::Checkbox(dmsg::mask_enable, &_mask_enable);
-    ui::help_on_hover(dmsg::mask_enable_help);
+    ImGui::EndDisabled();
+    if (backends().builtin_masking) {
+        ui::help_on_hover(dmsg::mask_enable_help);
+    } else {
+        ui::TextDisabledWrapped(dmsg::mask_objects_need_segmentation);
+        ui::help_on_hover_raw(backends().masking_reason.c_str());
+    }
 
     // A sibling, not a child: the stencil is geometry, so it works with no
     // model downloaded and on a build with no segmentation in it at all.
     if (ui::Checkbox(dmsg::mask_border_enable, &_border_enable) && _border_enable) {
         // Ticking it has to do something on its own. The fisheye border is
         // what it is for, so an input with nothing drawn on it yet gets the
-        // fit switched on; one that has been edited is left alone.
+        // fit, unless it is a GoPro's sphere, whose views have no border.
         for (PrepInput& in : _sources)
-            if (in.stencil.empty()) in.stencil.detect_border = true;
+            if (in.stencil.empty() && !in.pano360.valid() && !is_pano360_path(in.path))
+                in.stencil.detect_border = true;
     }
     ui::help_on_hover(dmsg::mask_border_enable_help);
     if (_border_enable) {
@@ -4780,7 +4802,7 @@ void GuiApp::draw_masking_options() {
             if (ui::Selectable(dmsg::stencil_areas_per_input, _frame_shapes.empty()))
                 _frame_shapes.clear();
             for (const StencilPreset& p : _frame_shapes_list)
-                if (ui::SelectableRaw(p.name, p.name == _frame_shapes)) {
+                if (ui::SelectableRaw(stencil_preset_label(p), p.name == _frame_shapes)) {
                     _frame_shapes = p.name;
                     apply_frame_shapes();
                 }
@@ -4802,9 +4824,8 @@ void GuiApp::draw_masking_options() {
     ImGui::Indent();
 
     const ModelEntry* entry = find_model(_model_id);
-    const bool builtin_masking = backends().builtin_masking;
 
-    if (_mask_enable && builtin_masking) {
+    if (_mask_enable) {
         const ModelEntry* before = entry;
         draw_mask_model_picker(_model_id, &_mask_detector_id, _download, [this] {
             request_model_download(_model_id, _mask_detector_id);
@@ -4841,9 +4862,6 @@ void GuiApp::draw_masking_options() {
                 ui::TextColoredWrapped(kWarn, dmsg::mask_inputs_need_clicks,
                                        {unprompted});
         }
-    } else if (_mask_enable) {
-        ui::TextWrappedRaw(backends().masking_note);
-        ui::help_on_hover_raw(backends().masking_reason.c_str());
     }
 
     const bool mask_preview_busy = native_work_busy();
@@ -4945,6 +4963,12 @@ void GuiApp::draw_masking_options() {
     }
 
     if (ui::CollapsingHeader(dmsg::mask_advanced)) {
+        if (text) {
+            ImGui::SetNextItemWidth(px(320.0f));
+            ui::InputTextEnglish(dmsg::mask_features_only, "sky; cloud",
+                                 &_mask.feature_prompt);
+            ui::help_on_hover(dmsg::mask_features_only_help);
+        }
         // The preview reads these off the same fields. Grounding DINO scores
         // on its own scale, so the slider is its threshold there, and it keeps
         // every box, so there is no NMS to set.
@@ -5166,6 +5190,11 @@ void GuiApp::draw_geometry_options() {
         ImGui::SetNextItemWidth(px(220.0f));
         ui::ComboRaw(ui::detail::label(dmsg::geom_split), &_geometry.split, kTri, 3);
         ui::help_on_hover(gmsg::opt_split);
+        static const char* kFaceRes[] = {"output", "source"};
+        ImGui::SetNextItemWidth(px(220.0f));
+        ui::ComboRaw(ui::detail::label(dmsg::geom_face_res), &_geometry.face_res,
+                     kFaceRes, 2);
+        ui::help_on_hover(gmsg::opt_face_res);
         ImGui::SetNextItemWidth(px(220.0f));
         ui::ComboRaw(ui::detail::label(dmsg::geom_ray_depth), &_geometry.ray_depth,
                      kTri, 3);
@@ -5623,7 +5652,7 @@ GuiApp::DatasetFolders GuiApp::workspace_folders(const WorkspaceState& prior) co
         // the app's convention -- only a bundled folder is ever left flipped.
         f.mask_dir = (fs::path(_workspace) / "masks").string();
     } else if (prior.input_masks && _sources.size() == 1 && !_sources[0].is_video &&
-               _sources[0].packed_lenses == 0) {
+               _sources[0].packed_lenses == 0 && !_sources[0].heif) {
         // Masks that came with the photos pair with them where they lie.
         f.image_dir = fs::absolute(_sources[0].path, ec).string();
         f.mask_dir = fs::absolute(_sources[0].mask_dir, ec).string();
@@ -6151,10 +6180,6 @@ void GuiApp::draw_sfm_advanced() {
     ImGui::EndDisabled();
     ui::help_on_hover(backends().builtin_video ? dmsg::use_ffmpeg_help
                                                : dmsg::use_ffmpeg_always);
-    ImGui::BeginDisabled(!backends().builtin_masking);
-    ui::Checkbox(dmsg::use_python_masking, &_sfm_job.prep.force_external_masking);
-    ImGui::EndDisabled();
-    ui::help_on_hover(dmsg::use_python_masking_help);
 
     ui::Checkbox(dmsg::sfm_ba_cpu, &_sfm_job.ba_cpu);
     ui::help_on_hover(dmsg::sfm_ba_cpu_help);
@@ -6309,9 +6334,6 @@ void GuiApp::draw_tool_locations() {
         ui::help_on_hover(backends().builtin_video
                               ? dmsg::ffmpeg_executable_help_fallback
                               : dmsg::ffmpeg_executable_help_always);
-        ImGui::SetNextItemWidth(px(300.0f));
-        ch |= ui::InputText(dmsg::python_executable, &_python_exe);
-        ui::help_on_hover(dmsg::python_executable_help);
         if (ffmpeg_changed) mark_source_metadata_dirty();
         if (ch) save_settings();
     }
@@ -8573,9 +8595,62 @@ void GuiApp::draw_train_settings() {
         ui::SeparatorText(msg::section_basic_options);
         draw_basic_options();
 
+    #if 0
+        ui::Text(fld::seed_pointcloud);
+        if (!_cfg.seed_pointcloud.empty()) {
+            ImGui::SameLine();
+            if (ui::Button(msg::seed_cloud_restore)) {
+                _cfg.seed_pointcloud.clear();
+                _cfg_ui.touched.insert("seed_pointcloud");
+            }
+        }
+        ImGui::SetNextItemWidth(px(-70.0f));
+        if (ui::InputTextRaw("##seed_pointcloud", &_cfg.seed_pointcloud))
+            _cfg_ui.touched.insert("seed_pointcloud");
+        ui::help_on_hover(fld::seed_pointcloud_help);
+        ImGui::SameLine();
+        if (ui::ButtonRaw("...##seed_pointcloud_pick", ImVec2(60, 0)))
+            open_pick(PickAction::SeedPointcloud, fld::seed_pointcloud.get(),
+                      FileDialog::Mode::File, {".ply"});
+
+        auto* session = _runner.session();
+        const bool parsed = session && ph != TrainRunner::Phase::Loading &&
+            ph != TrainRunner::Phase::Preparing && ph != TrainRunner::Phase::LoadError &&
+            parse_settings_equal(session->cfg, _cfg);
+        const bool random = _cfg.random_init == "always" ||
+            (_cfg.random_init == "auto" && parsed && session->random_seeded);
+        if (!_cfg.resume.empty()) {
+            ui::TextWrapped(msg::seed_source_resume);
+        } else {
+            if (!_cfg.init_ply.empty())
+                ui::TextWrapped(_cfg.init_ply_add_points ? msg::seed_source_splat_add
+                                                       : msg::seed_source_splat);
+            if (_cfg.init_ply.empty() || _cfg.init_ply_add_points) {
+                if (random)
+                    ui::TextWrapped(msg::seed_source_random);
+                else if (!_cfg.seed_pointcloud.empty())
+                    ui::TextWrapped(msg::seed_source_external,
+                                    {fs::path(_cfg.seed_pointcloud).filename().string()});
+                else
+                    ui::TextWrapped(parsed || _cfg.random_init == "never"
+                                        ? msg::seed_source_dataset : msg::seed_source_auto);
+            }
+        }
+        if (!_cfg.seed_pointcloud.empty() && (!_cfg.resume.empty() || random ||
+            (!_cfg.init_ply.empty() && !_cfg.init_ply_add_points)))
+            ui::TextColoredWrapped(kWarn, msg::seed_cloud_unused);
+    #endif
+
         ImGui::Spacing();
         if (ui::CollapsingHeader(msg::section_all_options))
             draw_config_editor(_cfg, _defaults, _cfg_ui);
+        if (!_cfg_ui.pick.field.empty()) {
+            const PathPick p = std::exchange(_cfg_ui.pick, {});
+            _pick_field = p.field;
+            open_pick(PickAction::ConfigPath, p.title,
+                      p.folder ? FileDialog::Mode::Folder : FileDialog::Mode::File,
+                      p.extensions, p.start_dir);
+        }
         ImGui::EndDisabled();
 
         // The macro options (quality, floater_suppression, ...) fill in the
@@ -9040,10 +9115,12 @@ void GuiApp::draw_basic_options() {
     }
     ImGui::Spacing();
 
+#if 0
     // Ahead of the two flags it sets, so the usual path is to pick a quality
     // and move on, and the numbers below are what that choice came to.
     macro_option("quality", _cfg.quality, fld::quality, fld::quality_help,
                  {"low", "medium", "high", "ultra"});
+#endif
 
     ImGui::SetNextItemWidth(w);
     if (ui::InputInt(msg::opt_steps, &_cfg.num_iterations))
@@ -9362,8 +9439,35 @@ void GuiApp::draw_vram_readout(float x0, float avail) {
                     format_gib(m.total_bytes) + " GiB"
               : "VRAM " + part(m.has_process, m.process_bytes) + " GiB";
 
+    // A run in progress (or just finished) has a forecast: its risk goes in
+    // front of the bar, and hovering either shows the projection behind it.
+    spirula::TrainerSession* session = nullptr;
+    {
+        const TrainRunner::Phase ph = _runner.phase();
+        if ((ph == TrainRunner::Phase::Training || ph == TrainRunner::Phase::Done) &&
+            _runner.engine_ready())
+            session = _runner.session();
+    }
+    const spirula::VramForecast brief =
+        session ? session->forecast().vram(false) : spirula::VramForecast{};
+    const spirula::i18n::Msg* risk = session ? oom_risk_label(brief.risk) : nullptr;
+    auto hover = [&] {
+        if (!session) { ui::help_on_hover(msg::vram_help); return; }
+        if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort |
+                                  ImGuiHoveredFlags_NoSharedDelay) ||
+            !ImGui::BeginTooltip())
+            return;
+        ImGui::PushTextWrapPos(px(480.0f));
+        ui::TextDisabled(msg::vram_help);
+        ImGui::PopTextWrapPos();
+        ImGui::Separator();
+        vram_forecast_card(session->forecast().vram(), session->cfg.num_iterations);
+        ImGui::EndTooltip();
+    };
+
     const ImGuiStyle& st = ImGui::GetStyle();
-    const float text_w = ImGui::CalcTextSize(label.c_str()).x;
+    float text_w = ImGui::CalcTextSize(label.c_str()).x;
+    if (risk) text_w += ImGui::CalcTextSize(risk->get()).x + st.ItemSpacing.x;
     ImGui::SameLine();
     // The bar is the first thing to give when the row is short -- the numbers
     // beside it say everything it does. Without this the readout ran off the
@@ -9377,6 +9481,11 @@ void GuiApp::draw_vram_readout(float x0, float avail) {
     }
     if (target > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(target);
 
+    if (risk) {
+        ui::TextColored(oom_risk_color(brief.risk), *risk);
+        hover();
+        ImGui::SameLine();
+    }
     if (bar_w > 0.0f) {
         const float h = ImGui::GetTextLineHeight();
         const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -9396,11 +9505,11 @@ void GuiApp::draw_vram_readout(float x0, float avail) {
         dl->AddRect(p, ImVec2(p.x + bar_w, p.y + h),
                     ImGui::GetColorU32(ImGuiCol_Border), r);
         ui::InvisibleButtonRaw("##vram", ImVec2(bar_w, h));
-        ui::help_on_hover(msg::vram_help);
+        hover();
         ImGui::SameLine(0.0f, gap);
     }
     ui::TextColoredRaw(sized ? kDim : color, label);
-    ui::help_on_hover(msg::vram_help);
+    hover();
 }
 
 // ---------------------------------------------------------------------------

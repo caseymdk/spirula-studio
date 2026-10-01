@@ -92,6 +92,9 @@ maximum of exactly 1.0 across a whole scene-linear capture.
 
 ## Where it is wired in
 
+Callers that also read stb_image's formats reach it through
+`core/ImageFile.h`, which dispatches TIFF (`docs/notes/tiff.md`) the same way.
+
 - `spirula sfm` — `sfm::loadGrayImage`, decoding to sRGB on the decode pool
   with `threads = 1` (the pool above already owns every core).
 - `spirula sam` / `spirula geometry` — `nn::load_image`, same conversion.
@@ -103,10 +106,10 @@ maximum of exactly 1.0 across a whole scene-linear capture.
   `ImageCompare`'s "Original file" pane, which quantizes the file's own values
   with no transfer curve so it shows what is stored rather than a display of it.
 
-The one path that cannot read an EXR is the **external masking fallback**,
-`reference/scripts/mask.py`: Pillow has no EXR reader. It now counts the files
-it could not open and says so at the end of the run rather than leaving the
-capture silently unmasked. The built-in masking (`SS_BUILD_SAM`) reads them.
+Masking (`SS_BUILD_SAM`) reads them too. The hand-run
+`reference/scripts/mask.py` cannot -- Pillow has no EXR reader -- so it counts
+the files it could not open and says so at the end of the run rather than
+leaving the capture silently unmasked.
 
 ## Testing
 

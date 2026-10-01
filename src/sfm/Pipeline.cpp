@@ -42,11 +42,13 @@
 #include "sfm/core/Log.h"
 #include "sfm/core/Features.h"
 #include "sfm/core/Image.h"
+#include "sfm/core/LensCalibration.h"
 #include "sfm/core/ImageLoader.h"
 #include "sfm/core/Manifest.h"
 #include "sfm/core/Mask.h"
 #include "sfm/core/Matches.h"
 #include "sfm/feature/ExpansionCheck.h"
+#include "sfm/core/SerialWorker.h"
 #include "sfm/feature/Matcher.h"
 #include "sfm/feature/PairSelection.h"
 #include "sfm/feature/Pairing.h"
@@ -79,7 +81,7 @@ bool isImageExt(const std::string& e) {
     std::string s;
     for (char c : e) s += (char)std::tolower((unsigned char)c);
     return s == ".jpg" || s == ".jpeg" || s == ".png" || s == ".bmp" || s == ".tga" ||
-           s == ".ppm" || s == ".pgm" || s == ".exr";
+           s == ".ppm" || s == ".pgm" || s == ".exr" || s == ".tif" || s == ".tiff";
 }
 
 // macOS AppleDouble sidecars (`._<name>`, written on exFAT / NTFS / SMB) keep
@@ -196,6 +198,31 @@ std::string metricReason(const MetricFit& f) {
     return {};
 }
 
+
+static void logLensPlan(const LensPlan& p) {
+    const std::string lens = p.lens.lens, model = camInfo(p.model).cli_name;
+    if (p.use == LensUse::Used) {
+        const std::vector<double>& v = p.fit.params;
+        L::out(Tag::Run, M::lens_calib_used,
+               {p.prefix, lens, p.source, model, L::num(v[0], 2), L::num(v[1], 2), L::num(v[2], 2),
+                L::num(v[3], 2), L::num(p.fit.max_px, 2)});
+        return;
+    }
+    std::string why;
+    switch (p.use) {
+        case LensUse::Override: why = M::lens_skip_override.get(); break;
+        case LensUse::DatasetWide: why = M::lens_skip_dataset.get(); break;
+        case LensUse::Model: why = spirula::i18n::format(M::lens_skip_model, {model}); break;
+        case LensUse::Size:
+            why = spirula::i18n::format(M::lens_skip_size,
+                                        {(long long)p.width, (long long)p.height,
+                                         (long long)p.lens.width, (long long)p.lens.height});
+            break;
+        case LensUse::NoImages: why = M::lens_skip_images.get(); break;
+        case LensUse::Used: break;
+    }
+    L::out(Tag::Run, M::lens_calib_skipped, {p.prefix, lens, p.source, why});
+}
 
 SensorCaptures loadSensorCaptures(const SfmConfig& cfg, bool verbose) {
     SensorCaptures out;
@@ -1272,11 +1299,13 @@ void sweepStaleFeatures(const fs::path& outdir, const std::set<fs::path>& live) 
 // mtime comparison, because a re-run that regenerated the frames or the masks
 // leaves everything else about the settings identical.
 bool featuresAreCurrent(const fs::path& feat, const fs::path& img,
-                        const std::string& mask, uint32_t& count) {
+                        const std::string& mask, const std::string& feature_mask,
+                        uint32_t& count) {
     std::error_code fe, ie, me;
     const auto t = fs::last_write_time(feat, fe);
     if (fe || t < fs::last_write_time(img, ie) || ie) return false;
-    if (!mask.empty() && t < fs::last_write_time(mask, me) && !me) return false;
+    for (const std::string* m : {&mask, &feature_mask})
+        if (!m->empty() && t < fs::last_write_time(*m, me) && !me) return false;
     return peekFeatures(feat.string(), count);
 }
 
@@ -1286,16 +1315,22 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
                      const SfmConfig& cfg, ExtractStats& stats, bool reuse) {
     const SiftOptions& opt = cfg.sift;
     const std::string& maskdir = cfg.mask_dir;
+    const std::string& fmaskdir = cfg.feature_mask_dir;
     // Recursive: per-folder intrinsics (ppisp) keep images in images/<camera>/
     // and the folder is the grouping key (D17). A mask directory nested inside
     // is skipped -- masks are PNGs too, and would double the image count with
     // garbage views.
     std::error_code skip_ec;
-    const bool skip_masks = !maskdir.empty() && fs::is_directory(maskdir, skip_ec);
+    std::vector<std::string> skip;
+    for (const std::string* d : {&maskdir, &fmaskdir})
+        if (!d->empty() && fs::is_directory(*d, skip_ec)) skip.push_back(*d);
     std::vector<fs::path> found;
     for (auto it = fs::recursive_directory_iterator(imagedir, fs::directory_options::follow_directory_symlink);
          it != fs::recursive_directory_iterator(); ++it) {
-        if (skip_masks && it->is_directory() && fs::equivalent(it->path(), maskdir, skip_ec)) {
+        if (it->is_directory() &&
+            std::any_of(skip.begin(), skip.end(), [&](const std::string& d) {
+                return fs::equivalent(it->path(), d, skip_ec);
+            })) {
             it.disable_recursion_pending();
             continue;
         }
@@ -1384,6 +1419,24 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
             L::warn(Tag::Extract, M::extract_some_unmasked,
                     {(long long)stats.unmasked_images, stats.first_unmasked});
     }
+    // An image without one keeps all its features, as under --masks; a tree
+    // matching nothing is not fatal here, since the sky is often absent.
+    MaskIndex fmasks(fmaskdir);
+    if (!fmaskdir.empty() && !fmasks.valid())
+        L::warn(Tag::Extract, M::extract_mask_dir_missing, {fmaskdir});
+    if (fmasks.valid()) {
+        lopt.feature_mask_paths.assign(paths.size(), std::string());
+        size_t matched = 0;
+        for (size_t k = 0; k < paths.size(); k++) {
+            std::string& fp = lopt.feature_mask_paths[k];
+            fp = fmasks.find(relativeTo(paths[k], imagedir).generic_string());
+            if (fp.empty()) continue;
+            matched++;
+            if (lopt.mask_paths.empty() || lopt.mask_paths[k].empty()) stats.masked_images++;
+        }
+        L::out(Tag::Extract, M::extract_masks_matched,
+               {(long long)matched, (long long)paths.size(), fmaskdir});
+    }
 
     // Where each image's features belong, and what a previous run already put
     // there. The total the bar counts is the capture, not the work left.
@@ -1404,7 +1457,10 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
             uint32_t count = 0;
             const std::string mask =
                 k < lopt.mask_paths.size() ? lopt.mask_paths[k] : std::string();
-            if (!featuresAreCurrent(outs[k], paths[k], mask, count)) {
+            const std::string fmask = k < lopt.feature_mask_paths.size()
+                                          ? lopt.feature_mask_paths[k]
+                                          : std::string();
+            if (!featuresAreCurrent(outs[k], paths[k], mask, fmask, count)) {
                 todo.push_back(k);
                 continue;
             }
@@ -1432,11 +1488,14 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
                 sorted_dims[i] = sorted_dims[k];
                 outs[i] = std::move(outs[k]);
                 if (!lopt.mask_paths.empty()) lopt.mask_paths[i] = std::move(lopt.mask_paths[k]);
+                if (!lopt.feature_mask_paths.empty())
+                    lopt.feature_mask_paths[i] = std::move(lopt.feature_mask_paths[k]);
             }
             paths.resize(todo.size());
             sorted_dims.resize(todo.size());
             outs.resize(todo.size());
             if (!lopt.mask_paths.empty()) lopt.mask_paths.resize(todo.size());
+            if (!lopt.feature_mask_paths.empty()) lopt.feature_mask_paths.resize(todo.size());
         }
     }
     if (paths.empty()) {
@@ -1455,75 +1514,98 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
     std::unique_ptr<IFeatureExtractor> ext =
         createFeatureExtractor(cfg.features, opt, cfg.aliked, cfg.loma);
     if (opt.verbose) L::err(Tag::Extract, M::extract_frontend, {ext->name()});
+    // Everything after extract() reads only the image and its features, so it
+    // runs on its own thread while the device works on the next image.
+    static const std::string kNoPath;
+    auto postProcess = [&](size_t k, GrayImage& img, FeatureSet& f) {
+        if (img.exif_mirror_dropped && !stats.warned_exif_mirror) {
+            stats.warned_exif_mirror = true;
+            L::warn(Tag::Extract, M::extract_exif_mirror_dropped,
+                    {fs::path(paths[k]).filename().string()});
+        }
+        sampleFeatureColors(f, img);
+        uint32_t dropped = 0;
+        const std::string& mpath =
+            k < lopt.mask_paths.size() && !lopt.mask_paths[k].empty() ? lopt.mask_paths[k]
+            : k < lopt.feature_mask_paths.size() ? lopt.feature_mask_paths[k]
+                                                 : kNoPath;
+        if (!mpath.empty()) {
+            if (img.mask.empty()) {
+                stats.mask_unreadable++;
+                L::warn(Tag::Extract, M::extract_mask_undecodable,
+                        {mpath, fs::path(paths[k]).filename().string()});
+            } else {
+                // img's own size, not the probed one: `apply` turned both.
+                checkMaskShape(mpath, img.mask, {img.orig_width, img.orig_height});
+                const uint32_t before = f.count();
+                dropped = applyMask(f, img.mask);
+                stats.masked_out += dropped;
+                // An inverted mask, or one whose keep value is 0, masks
+                // an image away entirely -- invisible until the model is
+                // short of images. Warn once; the run continues.
+                if (before && dropped == before && !stats.warned_empty) {
+                    stats.warned_empty = true;
+                    L::warn(Tag::Extract, M::extract_mask_empty,
+                            {mpath, fs::path(paths[k]).filename().string()});
+                }
+            }
+        }
+        // Back to the source file's coordinates (D46), so cameras.bin
+        // describes the user's images and not the working copy. Everything
+        // reading a keypoint against the decoded image has already run.
+        finishFeatures(f, img);
+        fs::create_directories(outs[k].parent_path());
+        writeFeatures(outs[k].string(), f);
+        stats.features += f.count();
+        stats.features_new += f.count();
+        stats.images++;
+        Event ev;
+        ev.kind = Event::Kind::ImageExtracted;
+        ev.stage = Stage::Extract;
+        ev.done = stats.images;
+        ev.total = (int64_t)n_all;
+        ev.name = fs::path(paths[k]).filename().string();
+        ev.width = img.orig_width;
+        ev.height = img.orig_height;
+        ev.features = f.count();
+        ev.masked = dropped;
+        events::emit(ev);
+        // The picture the reel draws, from the copy already in hand.
+        if (progress::enabled()) {
+            fs::path stem = relativeTo(paths[k], imagedir);
+            stem.replace_extension();
+            progress::thumbnail(stem.generic_string(), img.rgb.data(),
+                                img.width, img.height);
+        }
+    };
+    SerialWorker post;  // after postProcess: joined before it goes away
+    auto extractOne = [&](size_t k, GrayImage& img, const GrayImage* next) {
+        FeatureSet f = ext->extractAhead(img, next);
+        std::vector<float>().swap(img.data);  // the worker needs color, not luma
+        post.submit([&postProcess, k, img = std::move(img), f = std::move(f)]() mutable {
+            postProcess(k, img, f);
+        });
+    };
+    // One image is held back, so the extractor knows the next one and can
+    // queue its device work before finishing this one on the host.
+    std::optional<std::pair<size_t, GrayImage>> held;
     loadImagesInOrder(
         paths, plan, lopt,
         [&](size_t k, GrayImage& img) {
             cancel::check();
-            if (img.exif_mirror_dropped && !stats.warned_exif_mirror) {
-                stats.warned_exif_mirror = true;
-                L::warn(Tag::Extract, M::extract_exif_mirror_dropped,
-                        {fs::path(paths[k]).filename().string()});
-            }
-            FeatureSet f = ext->extract(img);
-            sampleFeatureColors(f, img);
-            uint32_t dropped = 0;
-            if (!lopt.mask_paths.empty() && !lopt.mask_paths[k].empty()) {
-                if (img.mask.empty()) {
-                    stats.mask_unreadable++;
-                    L::warn(Tag::Extract, M::extract_mask_undecodable,
-                            {lopt.mask_paths[k],
-                             fs::path(paths[k]).filename().string()});
-                } else {
-                    // img's own size, not the probed one: `apply` turned both.
-                    checkMaskShape(lopt.mask_paths[k], img.mask,
-                                   {img.orig_width, img.orig_height});
-                    const uint32_t before = f.count();
-                    dropped = applyMask(f, img.mask);
-                    stats.masked_out += dropped;
-                    // An inverted mask, or one whose keep value is 0, masks
-                    // an image away entirely -- invisible until the model is
-                    // short of images. Warn once; the run continues.
-                    if (before && dropped == before && !stats.warned_empty) {
-                        stats.warned_empty = true;
-                        L::warn(Tag::Extract, M::extract_mask_empty,
-                                {lopt.mask_paths[k],
-                                 fs::path(paths[k]).filename().string()});
-                    }
-                }
-            }
-            // Back to the source file's coordinates (D46), so cameras.bin
-            // describes the user's images and not the working copy. Everything
-            // reading a keypoint against the decoded image has already run.
-            finishFeatures(f, img);
-            fs::create_directories(outs[k].parent_path());
-            writeFeatures(outs[k].string(), f);
-            stats.features += f.count();
-            stats.features_new += f.count();
-            stats.images++;
-            Event ev;
-            ev.kind = Event::Kind::ImageExtracted;
-            ev.stage = Stage::Extract;
-            ev.done = stats.images;
-            ev.total = (int64_t)n_all;
-            ev.name = fs::path(paths[k]).filename().string();
-            ev.width = img.orig_width;
-            ev.height = img.orig_height;
-            ev.features = f.count();
-            ev.masked = dropped;
-            events::emit(ev);
-            // The picture the reel draws, from the copy already in hand.
-            if (progress::enabled()) {
-                fs::path stem = relativeTo(paths[k], imagedir);
-                stem.replace_extension();
-                progress::thumbnail(stem.generic_string(), img.rgb.data(),
-                                    img.width, img.height);
-            }
+            if (held) extractOne(held->first, held->second, &img);
+            held.emplace(k, std::move(img));
         },
         [&](size_t k, const std::string& err) {
             L::fail(Tag::Extract, M::extract_failed_file,
                     {fs::path(paths[k]).filename().string(), err});
             stats.failed++;
         });
+    if (held) {
+        cancel::check();
+        extractOne(held->first, held->second, nullptr);
+    }
+    post.finish();
     events::stage_end(Stage::Extract);
     return 0;
 }
@@ -2235,7 +2317,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
             (long long)cfg.sift.max_num_features});
     L::out(Tag::Run, M::run_data_type, {cfg.data_type});
     L::out(Tag::Run, M::run_cameras, {cfg.camera_model, cfg.camera_mode});
+    std::vector<LensPlan> lens_plans = collectLensPlans(cfg.telemetry_inputs, _imagedir);
+    applyLensPlans(cfg.camera, lens_plans);
+    for (const LensPlan& p : lens_plans) logLensPlan(p);
     if (!cfg.mask_dir.empty()) L::out(Tag::Run, M::run_masks, {cfg.mask_dir});
+    if (!cfg.feature_mask_dir.empty()) L::out(Tag::Run, M::run_masks, {cfg.feature_mask_dir});
     // What the two knobs moved, so a surprising run is explainable from its own
     // output rather than from reading the preset table.
     for (const PresetChange& p : in.preset_changes)
