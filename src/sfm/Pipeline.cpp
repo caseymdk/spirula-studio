@@ -36,6 +36,7 @@
 #include "core/ExrImage.h"
 #include "sfm/core/Cancel.h"
 #include "sfm/core/Events.h"
+#include "sfm/core/Exif.h"
 #include "sfm/core/Progress.h"
 #include "sfm/core/CameraSetup.h"
 #include "sfm/core/FeatureCompaction.h"
@@ -193,6 +194,11 @@ std::string metricReason(const MetricFit& f) {
                 M::metric_fail_collinear,
                 {L::num(100.0 * f.perp_frac, 2), L::num(100.0 * kMetricMinPerpFraction, 1),
                  L::num(f.perp_frac > 0 ? 1.0 / f.perp_frac : 0.0, 0)});
+        case MetricFail::Tilted:
+            return spirula::i18n::format(
+                M::metric_fail_tilted,
+                {L::num(f.T.scale, 4), L::num(f.scale_3d > 0 ? f.T.scale / f.scale_3d : 0.0, 1),
+                 L::num(f.scale_3d, 4)});
         case MetricFail::None: break;
     }
     return {};
@@ -247,6 +253,7 @@ SensorCaptures loadSensorCaptures(const SfmConfig& cfg, bool verbose) {
         lc->cap.time_offset = in.time_offset;
         lc->cap.readout = t.frame_readout;
         lc->cap.timeline = &lc->timeline;
+        lc->carrier = t.carrier;
         L::out(Tag::Orient, M::sensor_file,
                {in.path, t.camera.empty() ? "?" : t.camera, L::num(c.gyro.rate_hz, 0),
                 L::num(c.accel.rate_hz, 0), L::num(c.orientation.rate_hz, 0),
@@ -385,6 +392,109 @@ std::vector<Camera> perImageCameras(const CameraSetup& cs, size_t num_images) {
     return percam;
 }
 
+// --metric-gps none states no GPS centre factor, so no registration is checked
+// against the GPS; positions still propose pairs. Otherwise it sets the factors'
+// radius, whether "full" trusts them, and the flat fit.
+static SensorPriorOptions sensorPriorOptions(const SfmConfig& cfg) {
+    SensorPriorOptions po;
+    po.max_dt = cfg.sensor_max_dt;
+    po.gps_centres = cfg.metricGps();
+    po.gps_max_error = cfg.metricGps() && cfg.metric_max_error > 0 ? cfg.metric_max_error : 5.0;
+    po.gps_max_error_frac = cfg.metric_max_error_frac;
+    po.trusted_position = cfg.metric_gps == "full";
+    po.gps_flat = cfg.metric_gps == "horizontal";
+    po.verbose = !cfg.quiet;
+    return po;
+}
+
+bool isPhoneMake(const std::string& make) {
+    std::string m;
+    for (char c : make) m += (char)std::tolower((unsigned char)c);
+    while (!m.empty() && (m.back() == ' ' || m.back() == '\0')) m.pop_back();
+    static const char* const phones[] = {"apple",  "google", "samsung", "huawei", "honor",
+                                         "xiaomi", "oneplus", "oppo",   "vivo",   "motorola",
+                                         "realme", "nothing"};
+    for (const char* p : phones)
+        if (m == p) return true;
+    return false;
+}
+
+MetricGpsChoice resolveMetricGps(const MetricGpsEvidence& e) {
+    if (e.positions_file) return {"none", MetricGpsWhy::Positions};
+    if (e.telemetry_gps > 0)
+        return e.telemetry_dji == e.telemetry_gps
+                   ? MetricGpsChoice{"full", MetricGpsWhy::DjiTelemetry}
+                   : MetricGpsChoice{"horizontal", MetricGpsWhy::OtherTelemetry};
+    // Three fixes is the least a similarity fits; fewer is no GPS worth a mode.
+    if (e.exif_fixes >= 3) {
+        if (2 * e.exif_phone > e.exif_fixes) return {"horizontal", MetricGpsWhy::ExifPhone};
+        if (10 * e.exif_no_alt > e.exif_fixes) return {"horizontal", MetricGpsWhy::ExifNoAltitude};
+        return {"full", MetricGpsWhy::ExifAltitude};
+    }
+    return {"none", MetricGpsWhy::NoGps};
+}
+
+MetricGpsEvidence metricGpsEvidence(const SfmConfig& cfg, const SensorCaptures& sensors,
+                                    const std::string& imagedir) {
+    MetricGpsEvidence e;
+    e.positions_file = !cfg.metric_positions.empty();
+    for (const auto& lc : sensors.loaded) {
+        if (!lc->timeline.hasGps()) continue;
+        e.telemetry_gps++;
+        e.telemetry_dji += lc->carrier == TelemetryCarrier::DjiDvtm;
+    }
+    if (imagedir.empty() || e.positions_file || e.telemetry_gps) return e;
+    std::error_code walk, ec;
+    for (auto it = fs::recursive_directory_iterator(
+             imagedir, fs::directory_options::follow_directory_symlink, walk);
+         !walk && it != fs::recursive_directory_iterator(); it.increment(walk)) {
+        if (!it->is_regular_file(ec) || isSidecar(it->path()) ||
+            !isImageExt(it->path().extension().string()))
+            continue;
+        const ExifData x = readExif(it->path().string());
+        if (!x.has_gps) continue;
+        e.exif_fixes++;
+        e.exif_no_alt += !x.has_alt;
+        if (isPhoneMake(x.make)) {
+            e.exif_phone++;
+            e.phone_make = x.make;
+        }
+    }
+    return e;
+}
+
+MetricGpsChoice applyMetricGpsAuto(SfmConfig& cfg, const SensorCaptures& sensors,
+                                   const std::string& imagedir) {
+    if (cfg.metric_gps != "auto") return {cfg.metric_gps, MetricGpsWhy::Explicit};
+    const MetricGpsEvidence e = metricGpsEvidence(cfg, sensors, imagedir);
+    const MetricGpsChoice c = resolveMetricGps(e);
+    cfg.metric_gps = c.mode;
+    switch (c.why) {
+        case MetricGpsWhy::Positions: L::out(Tag::Run, M::metric_gps_auto_positions); break;
+        case MetricGpsWhy::DjiTelemetry:
+            L::out(Tag::Run, M::metric_gps_auto_dji, {(long long)e.telemetry_gps});
+            break;
+        case MetricGpsWhy::OtherTelemetry:
+            L::out(Tag::Run, M::metric_gps_auto_telemetry,
+                   {(long long)(e.telemetry_gps - e.telemetry_dji), (long long)e.telemetry_gps});
+            break;
+        case MetricGpsWhy::ExifAltitude:
+            L::out(Tag::Run, M::metric_gps_auto_exif_alt, {(long long)e.exif_fixes});
+            break;
+        case MetricGpsWhy::ExifNoAltitude:
+            L::out(Tag::Run, M::metric_gps_auto_exif_noalt,
+                   {(long long)e.exif_no_alt, (long long)e.exif_fixes});
+            break;
+        case MetricGpsWhy::ExifPhone:
+            L::out(Tag::Run, M::metric_gps_auto_exif_phone,
+                   {(long long)e.exif_phone, (long long)e.exif_fixes, e.phone_make});
+            break;
+        case MetricGpsWhy::NoGps:
+        case MetricGpsWhy::Explicit: L::out(Tag::Run, M::metric_gps_auto_none); break;
+    }
+    return c;
+}
+
 std::unique_ptr<TelemetryPriors> makeSensorPriors(const SfmConfig& cfg,
                                                   const SensorCaptures& sensors,
                                                   const MatchesDatabase& db,
@@ -394,12 +504,8 @@ std::unique_ptr<TelemetryPriors> makeSensorPriors(const SfmConfig& cfg,
     std::vector<std::string> names;
     names.reserve(db.images.size());
     for (const ImageEntry& im : db.images) names.push_back(im.name);
-    SensorPriorOptions po;
-    po.max_dt = cfg.sensor_max_dt;
-    po.gps_max_error = cfg.metric_gps != "none" && cfg.metric_max_error > 0 ? cfg.metric_max_error : 5.0;
-    po.gps_max_error_frac = cfg.metric_max_error_frac;
-    po.verbose = !cfg.quiet;
-    auto priors = std::make_unique<TelemetryPriors>(sensors.caps(), names, cam_ids, po);
+    auto priors = std::make_unique<TelemetryPriors>(sensors.caps(), names, cam_ids,
+                                                    sensorPriorOptions(cfg));
     return priors->timedImages() ? std::move(priors) : nullptr;
 }
 
@@ -507,7 +613,7 @@ void calibrateSensorPriorsFromDatabase(TelemetryPriors& priors, const MatchesDat
 bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
               const std::string& imagedir, bool verbose,
               std::vector<ModelGauge>& gauge, const SensorCaptures* sensors) {
-    const bool gps = cfg.metric_gps != "none";
+    const bool gps = cfg.metricGps();
     const bool flat = cfg.metric_gps == "horizontal";
     const bool file = !cfg.metric_positions.empty();
     // A portrait capture's up is 90 degrees off its images'; `apply` already
@@ -1011,6 +1117,36 @@ static std::map<std::string, std::string> imageStemMap(const std::string& imaged
             stem2name[stem.generic_string()] = rel.generic_string();
         }
     return stem2name;
+}
+
+std::unique_ptr<ExifGpsPriors> makeExifGpsPriors(const SfmConfig& cfg, const std::string& imagedir,
+                                                 const MatchesDatabase& db, const CameraSetup& cams,
+                                                 bool verbose) {
+    if (imagedir.empty() || !(cfg.sensor_map || cfg.sensor_pairs)) return nullptr;
+    const std::map<std::string, std::string> stem2name = imageStemMap(imagedir);
+    std::vector<std::optional<Geodetic>> fixes(db.images.size());
+    int with = 0, no_alt = 0;
+    for (size_t i = 0; i < db.images.size(); i++) {
+        auto it = stem2name.find(db.images[i].name);
+        if (it == stem2name.end()) continue;
+        const ExifData e = readExif((fs::path(imagedir) / it->second).string());
+        if (!e.has_gps) continue;
+        // As the metric gauge reads it: a fix with no altitude sits at sea level.
+        fixes[i] = Geodetic{e.lat_deg, e.lon_deg, e.alt_m};
+        with++;
+        if (!e.has_alt) no_alt++;
+    }
+    if (!with) return nullptr;
+    if (verbose)
+        L::out(Tag::Match, M::metric_gps_read,
+               {(long long)with, (long long)db.images.size(), (long long)no_alt});
+    std::vector<char> level(db.images.size(), 0);
+    if (cfg.level_erp)
+        for (size_t i = 0; i < level.size() && i < cams.ids.size(); i++) {
+            auto it = cams.cameras.find(cams.ids[i]);
+            level[i] = it != cams.cameras.end() && it->second.isSpherical();
+        }
+    return std::make_unique<ExifGpsPriors>(fixes, sensorPriorOptions(cfg), std::move(level));
 }
 
 // The unregistered list as a data file, when SS_UNREG_LOG names one: per
@@ -1694,8 +1830,11 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
         if (verbose) printCameraSetup(Tag::Match, calib->cameras, calib->setup, feats.size());
         if (calib->sensors)
             calib->priors = makeSensorPriors(cfg, *calib->sensors, db, calib->cameras.ids);
+        if (!calib->priors)
+            calib->exif_priors = makeExifGpsPriors(cfg, calib->image_dir, db, calib->cameras, verbose);
     }
     TelemetryPriors* priors = calib ? calib->priors.get() : nullptr;
+    const PriorSource* placed = calib ? calib->positionPriors() : nullptr;
 
     std::vector<std::pair<uint32_t, uint32_t>> pairs;
     // Pair selection is minutes on a large capture and used to look like a
@@ -1796,10 +1935,10 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
     }
 #endif
     // Images the GPS puts near each other, whatever the shortlist thought.
-    if (priors && cfg.sensor_pairs && !reused_pairs) {
+    if (placed && cfg.sensor_pairs && !reused_pairs) {
         size_t positioned = 0;
         const std::vector<std::pair<uint32_t, uint32_t>> nearby = gpsProximityPairs(
-            *priors, (uint32_t)n_images, cfg.sensor_pair_radius, 20, &positioned);
+            *placed, (uint32_t)n_images, cfg.sensor_pair_radius, 20, &positioned);
         const size_t before = pairs.size();
         pairs.insert(pairs.end(), nearby.begin(), nearby.end());
         std::sort(pairs.begin(), pairs.end());
@@ -2390,7 +2529,9 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     MatchStats mstats;
     VerifyCalibration calib;
     calib.setup = cfg.camera;
+    calib.image_dir = _imagedir;
     const SensorCaptures sensors = loadSensorCaptures(cfg, verbose);
+    applyMetricGpsAuto(cfg, sensors, _imagedir);
     calib.sensors = &sensors;
     // What this stage's output depends on: its own settings, the extraction
     // that produced its input, and the feature files themselves -- the pair
@@ -2423,6 +2564,8 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
                     calibrateSensorPriorsFromDatabase(
                         *calib.priors, db, feats, perImageCameras(calib.cameras, feats.size()),
                         cfg.twoview, cfg.threads, verbose);
+                else
+                    calib.exif_priors = makeExifGpsPriors(cfg, _imagedir, db, calib.cameras, verbose);
             }
         } catch (const std::exception& e) {
             L::warn(Tag::Match, M::match_reuse_failed, {e.what()});
@@ -2493,7 +2636,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         return r;
     }
     Mapper mapper(db, feats, mapopt, cs.ids, &rigs, &seqs,
-                  cfg.sensor_map ? calib.priors.get() : nullptr);
+                  cfg.sensor_map ? calib.positionPriors() : nullptr);
     AssembleStats ast;
     std::vector<Reconstruction> models = runMapper(mapper, db, feats, cfg, ast);
     double t_map = now() - t0;

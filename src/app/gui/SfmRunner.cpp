@@ -714,10 +714,8 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
         argv.push_back("--max-image-size");
         argv.push_back(std::to_string(job.max_image_size));
     }
-    if (job.metric_gps > 0) {
-        argv.push_back("--metric-gps");
-        argv.push_back(sfm_pick(kSfmMetricGps, job.metric_gps));
-    }
+    argv.push_back("--metric-gps");
+    argv.push_back(sfm_pick(kSfmMetricGps, job.metric_gps, 3));
     if (job.sensor_gauge != 2) {
         argv.push_back("--sensor-gauge");
         argv.push_back(sfm_pick(kSfmSensorGauge, job.sensor_gauge, 2));

@@ -522,8 +522,14 @@ fitted from the camera centres with LO-RANSAC over the same `estimateSim3` that
 model merging uses, and `--metric-max-error` is its inlier radius in metres (0
 picks 5 for GPS, 0.5 for a positions file).
 
-`--metric-gps` takes `none` (the CLI default; the GUI asks for `horizontal`),
-`horizontal` or `full`, and the difference is the altitude.
+`--metric-gps` takes `none`, `horizontal`, `full` or `auto` (the default, in the
+CLI and the GUI), and the difference is the altitude. `auto` picks per capture,
+from what the code can tell apart, and says which in one line: `full` for a DJI
+telemetry track (an Avata or Osmo `.OSV`, whose altitude is barometric) or for
+EXIF fixes that carry an altitude; `horizontal` for any other telemetry GPS (a
+GoPro, an Insta360, a phone's CAMM track), for EXIF a phone maker wrote, or where
+more than a tenth of the fixes lack an altitude; `none` with no GPS at all, or
+beside `--metric-positions` (`applyMetricGpsAuto`, `sfm/Pipeline.cpp`).
 `full` fits all seven parameters, so the reference's
 vertical sets the model's tilt; `horizontal` fits only scale, heading and place,
 against latitude and longitude, and leaves which way is up to the recorded
@@ -541,9 +547,12 @@ radius, so a street walked end to end — which `full` refuses — fits.
 The fit is refused rather than approximated, and **what refuses it is geometry,
 not a noise model**. Fewer than three positioned cameras, reference positions
 that do not spread wider than the inlier radius, under half the cameras inlying,
-or (full only) cameras lying so close to a line that the reference amplifies
-orientation error more than 20x — each reports its own reason with the numbers
-behind it; the model is then still written, in the ordinary orient gauge, and
+(full only) cameras lying so close to a line that the reference amplifies
+orientation error more than 20x, or (horizontal only) a level scale more than
+1.25x the median ratio of GPS to model distance between inliers far apart —
+the up it was levelled about tips the camera path, as an Avata 360's IMU up
+90 deg off did on a straight flight (35x) — each reports its own reason with
+the numbers behind it; the model is then still written, in the ordinary orient gauge, and
 the exit status is 4.
 
 `merge` accepts a single model when a metric reference is given: there is
@@ -616,20 +625,41 @@ future sensor implements the same way (`core/PriorSource.h`;
   re-solved with the rotation fixed (`ransacPnPKnownRotation`, and the rig
   form for a whole frame) and refused when that finds fewer than the
   registration's own inlier floor; the seed pair takes the gyro's rotation
-  when it agrees; the audit does not unseat a pose the gyro vouches for.
+  when it agrees; the audit does not unseat a pose the gyro vouches for. A
+  PnP pose four GPS-fit radii off right after one inside the radius is
+  refused as a wrong-place PnP; when more than a fifth of the images checked
+  (and at least 10) stand refused, the frame is what is wrong, and the model
+  drops it and its GPS factors and retries what it refused.
 - **Bundle adjustment** (`--sensor-map`): every solve, growth and joint alike,
   takes camera-side factors evaluated on the host and added to whichever
   linear system the solver builds (`ba/Priors.h`, `ba/README.md`): the gyro's
   relative rotation between consecutive frames of each lens, gravity in each
   frame against a world up refitted per solve, the accelerometer's metric
   scale as one velocity-free triple constraint per three consecutive frames,
-  and GPS positions through a similarity refitted per solve. Every gauge
+  and GPS positions through a similarity refitted per solve, none under
+  `--metric-gps none`, which leaves the GPS to pairing alone. Every gauge
   quantity is re-estimated from the poses before each solve and frozen inside
   the factors, so the solver carries no global parameter and the model stays
   in its own gauge; the finishing gauge fit above then runs as before.
 - **Pairing** (`--sensor-pairs`, on): images the GPS puts within
   `--sensor-pair-radius` metres (20) of each other are matched whatever the
   shortlist thought.
+
+An image folder with EXIF GPS and no telemetry takes the same GPS factors
+(`ExifGpsPriors`). There, every image of an equirect camera group declares
+camera -Y as up (`--level-erp`, on): a horizon-levelled stitch, as DJI Studio
+and the Osmo 360 write, is level to 0.15-0.37 deg about its images' consensus.
+Each solve then states one up factor per image (sigma 0.3 deg) against that
+consensus, fits the GPS level about it, and a PnP pose tilted more than
+max(1 deg, 3 x the spread) off it is refused. The gate opens at 30 posed images
+and closes when the images disagree by more than 1 deg (the median about their
+consensus; a handheld 360's lens streams measure 2.7 and 10.8): the solve then
+takes no up factor and the GPS fit is what it was without them. Refused images
+never vote, so when more than 5% of the 20 or more images checked are refused
+the mapper drops the prior for the rest of the run and logs it once. Under
+`--metric-gps full` a GPS fit levelled by any up source keeps its vertical
+factor while the altitudes agree with the fit to within its inlier radius
+(their robust sigma about it); `horizontal` drops it.
 
 `--sensor-max-dt` (3 s) bounds the gap a gyro rotation may span. The mapper
 ends with how many registrations the gyro re-solved or refused and how many

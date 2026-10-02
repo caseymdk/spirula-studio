@@ -3761,49 +3761,85 @@ SS_MSG(metric_positions_help,
 SS_MSG(metric_gps_help,
     EN("Fit a local east-north-up metre frame to the images' EXIF GPS: `horizontal` reads "
        "latitude and longitude and leaves the tilt to the cameras' own up axis, `full` reads "
-       "altitude too; accuracy is a few metres, so the capture must be tens of metres across"),
+       "altitude too; accuracy is a few metres, so the capture must be tens of metres across"
+       ". `auto`, the default, picks `full` for a DJI telemetry track or EXIF fixes with an "
+       "altitude, `horizontal` for other telemetry, a phone's EXIF or fixes without an "
+       "altitude, and `none` without GPS or beside --metric-positions"),
     JA("画像の EXIF GPS にローカルな東北上メートル座標系を当てはめます。`horizontal` は"
        "緯度と経度だけを読み、傾きはカメラ自身の上方向に任せます。`full` は高度も読みます。"
-       "精度は数メートルなので、撮影範囲は数十メートル必要です"),
+       "精度は数メートルなので、撮影範囲は数十メートル必要です"
+       "。`auto` (既定) は DJI のテレメトリか高度付きの EXIF には `full`、それ以外のテレメトリ、スマートフォンの EXIF、高度のない位置には "
+       "`horizontal`、GPS がないときや --metric-positions があるときは `none` を選びます"),
     ZH_HANS("按图像 EXIF GPS 拟合本地东北天米制坐标系: `horizontal` 只读经纬度，倾斜交给相机"
-            "自身的上方向; `full` 连高度一起读。精度只有几米，所以采集范围要有几十米"),
+            "自身的上方向; `full` 连高度一起读。精度只有几米，所以采集范围要有几十米"
+            "。`auto` (默认) 对 DJI 遥测或带高度的 EXIF 选 `full`，对其他遥测、手机的 EXIF 或没有高度的定位选 `horizontal`，没有 "
+            "GPS 或给了 --metric-positions 时选 `none`"),
     ZH_HANT("按影像 EXIF GPS 擬合本地東北天公尺座標系: `horizontal` 只讀經緯度，傾斜交給相機"
-            "自身的上方向; `full` 連高度一起讀。精度只有幾公尺，所以拍攝範圍要有數十公尺"),
+            "自身的上方向; `full` 連高度一起讀。精度只有幾公尺，所以拍攝範圍要有數十公尺"
+            "。`auto` (預設) 對 DJI 遙測或帶高度的 EXIF 選 `full`，對其他遙測、手機的 EXIF 或沒有高度的定位選 `horizontal`，沒有 "
+            "GPS 或給了 --metric-positions 時選 `none`"),
     KO("이미지의 EXIF GPS 에 지역 동북상 미터 좌표계를 맞춥니다. `horizontal` 은 위도와 경도만 "
        "읽고 기울기는 카메라 자신의 위 방향에 맡기며, `full` 은 고도까지 읽습니다. 정확도가 "
-       "수 미터라 촬영 범위가 수십 미터는 되어야 합니다"),
+       "수 미터라 촬영 범위가 수십 미터는 되어야 합니다"
+       ". `auto` (기본값) 는 DJI 텔레메트리나 고도가 있는 EXIF 에는 `full`, 그 밖의 텔레메트리, 휴대폰의 EXIF, 고도 없는 "
+       "측위에는 `horizontal`, GPS 가 없거나 --metric-positions 가 있으면 `none` 을 고릅니다"),
     DE("Einen lokalen Ost-Nord-Oben-Meterrahmen an das EXIF-GPS der Bilder anpassen: "
        "`horizontal` liest Breite und Länge und überlässt die Neigung der eigenen Hochachse "
        "der Kameras, `full` liest auch die Höhe; die Genauigkeit liegt bei einigen Metern, "
-       "die Aufnahme muss also zehner Meter groß sein"),
+       "die Aufnahme muss also zehner Meter groß sein"
+       ". `auto`, die Vorgabe, wählt `full` für eine DJI-Telemetriespur oder "
+       "EXIF-Positionen mit Höhe, `horizontal` für andere Telemetrie, das EXIF eines "
+       "Telefons oder Positionen ohne Höhe, und `none` ohne GPS oder neben "
+       "--metric-positions"),
     FR("Ajuster un repère local est-nord-haut en mètres au GPS EXIF des images : `horizontal` "
        "lit la latitude et la longitude et laisse l'inclinaison à l'axe vertical des caméras, "
        "`full` lit aussi l'altitude ; la précision est de quelques mètres, la prise doit donc "
-       "faire des dizaines de mètres"),
+       "faire des dizaines de mètres"
+       ". `auto`, le défaut, choisit `full` pour une piste de télémétrie DJI ou des points "
+       "EXIF avec altitude, `horizontal` pour une autre télémétrie, l'EXIF d'un téléphone "
+       "ou des points sans altitude, et `none` sans GPS ou à côté de --metric-positions"),
     ES("Ajustar un marco local este-norte-arriba en metros al GPS EXIF de las imágenes: "
        "`horizontal` lee latitud y longitud y deja la inclinación al eje vertical de las "
        "cámaras, `full` lee también la altitud; la precisión es de unos metros, así que la "
-       "toma debe medir decenas de metros"),
+       "toma debe medir decenas de metros"
+       ". `auto`, el valor por defecto, elige `full` para una pista de telemetría DJI o "
+       "posiciones EXIF con altitud, `horizontal` para otra telemetría, el EXIF de un "
+       "teléfono o posiciones sin altitud, y `none` sin GPS o junto a --metric-positions"),
     PT("Ajustar um referencial local este-norte-cima em metros ao GPS EXIF das imagens: "
        "`horizontal` lê latitude e longitude e deixa a inclinação ao eixo vertical das "
        "câmeras, `full` lê também a altitude; a precisão é de alguns metros, por isso a "
-       "captura tem de ter dezenas de metros"),
+       "captura tem de ter dezenas de metros"
+       ". `auto`, o padrão, escolhe `full` para uma faixa de telemetria DJI ou posições "
+       "EXIF com altitude, `horizontal` para outra telemetria, o EXIF de um telefone ou "
+       "posições sem altitude, e `none` sem GPS ou junto de --metric-positions"),
     IT("Stimare un sistema locale est-nord-alto in metri dal GPS EXIF delle immagini: "
        "`horizontal` legge latitudine e longitudine e lascia l'inclinazione all'asse "
        "verticale delle camere, `full` legge anche la quota; la precisione è di alcuni metri, "
-       "quindi la ripresa deve misurare decine di metri"),
+       "quindi la ripresa deve misurare decine di metri"
+       ". `auto`, il predefinito, sceglie `full` per una traccia di telemetria DJI o punti "
+       "EXIF con quota, `horizontal` per altra telemetria, l'EXIF di un telefono o punti "
+       "senza quota, e `none` senza GPS o accanto a --metric-positions"),
     NL("Een lokaal oost-noord-omhoog meterstelsel op de EXIF-GPS van de beelden fitten: "
        "`horizontal` leest breedte en lengte en laat de kanteling aan de eigen verticale as "
        "van de camera's, `full` leest ook de hoogte; de nauwkeurigheid is enkele meters, dus "
-       "de opname moet tientallen meters groot zijn"),
+       "de opname moet tientallen meters groot zijn"
+       ". `auto`, de standaard, kiest `full` voor een DJI-telemetriespoor of EXIF-posities "
+       "met hoogte, `horizontal` voor andere telemetrie, de EXIF van een telefoon of "
+       "posities zonder hoogte, en `none` zonder gps of naast --metric-positions"),
     RU("Подогнать локальную метровую систему восток-север-верх к GPS из EXIF снимков: "
        "`horizontal` читает широту и долготу, а наклон оставляет собственной вертикали камер, "
        "`full` читает и высоту; точность в несколько метров, поэтому съёмка должна быть "
-       "десятки метров"),
+       "десятки метров"
+       ". `auto`, по умолчанию, выбирает `full` для трека телеметрии DJI или отсчётов EXIF "
+       "с высотой, `horizontal` для другой телеметрии, EXIF телефона или отсчётов без "
+       "высоты и `none` без GPS или рядом с --metric-positions"),
     TR("Görüntülerin EXIF GPS'ine yerel bir doğu-kuzey-yukarı metre çerçevesi oturt: "
        "`horizontal` enlem ve boylamı okur, eğimi kameraların kendi yukarı eksenine bırakır; "
        "`full` yüksekliği de okur; doğruluk birkaç metre olduğundan çekim onlarca metre "
-       "olmalı"));
+       "olmalı"
+       ". Varsayılan `auto`, DJI telemetri izi ya da yükseklikli EXIF konumları için "
+       "`full`, başka telemetri, bir telefonun EXIF'i ya da yüksekliksiz konumlar için "
+       "`horizontal`, GPS yoksa ya da --metric-positions varsa `none` seçer"));
 
 SS_MSG(metric_max_error_frac_help,
     EN("... or this fraction of the reference positions' RMS radius, whichever is larger, so "
@@ -4151,6 +4187,46 @@ SS_MSG(sensor_map_help,
        "силе тяжести, масштабу акселерометра и GPS"),
     TR("Kayıtları ve demet ayarlamalarını sensörlere bağla: jiroskopun dönüşleri, yerçekimi, "
        "ivmeölçerin ölçeği ve GPS"));
+
+SS_MSG(level_erp_help,
+    EN("Needs EXIF GPS. Hold every equirect image level, camera -Y up: an up factor per image and a "
+       "tilt check on each registration, both dropped for a run whose images are not level to "
+       "about 1 deg"),
+    JA("EXIF GPS が必要です。正距円筒画像をすべて水平 (カメラ -Y が上) として扱います: 画像ごとの"
+       "上方向の因子と各登録の傾き検査を加えますが、画像が約 1 度以内で水平でない撮影では、"
+       "どちらも使いません"),
+    ZH_HANS("需要 EXIF GPS。将每张等距柱状投影图像视为水平（相机 -Y 朝上）：为每张图像加入向上因子"
+            "并检查每次注册的倾斜；图像未水平到约 1 度以内时，二者都不使用"),
+    ZH_HANT("需要 EXIF GPS。將每張等距柱狀影像視為水平（相機 -Y 朝上）：為每張影像加入向上因子"
+            "並檢查每次註冊的傾斜；影像未水平到約 1 度以內時，兩者都不使用"),
+    KO("EXIF GPS가 필요합니다. 모든 등장방형 이미지를 수평(카메라 -Y가 위)으로 취급합니다. "
+       "이미지별 위쪽 인자와 등록마다의 기울기 검사를 넣으며, 이미지가 약 1도 이내로 수평이 "
+       "아니면 둘 다 사용하지 않습니다"),
+    DE("Benötigt EXIF-GPS. Jedes äquirektanguläre Bild waagerecht halten, Kamera -Y oben: ein "
+       "Oben-Faktor je Bild und eine Neigungsprüfung bei jeder Registrierung, beide entfallen, wenn "
+       "die Bilder nicht auf etwa 1 Grad waagerecht sind"),
+    FR("Nécessite le GPS EXIF. Tenir chaque image équirectangulaire de niveau, caméra -Y vers le "
+       "haut : un facteur de verticale par image et un contrôle d'inclinaison à chaque "
+       "enregistrement, tous deux abandonnés quand les images ne sont pas de niveau à environ 1 "
+       "degré près"),
+    ES("Requiere GPS EXIF. Mantener cada imagen equirrectangular nivelada, cámara -Y arriba: un "
+       "factor de vertical por imagen y una comprobación de inclinación en cada registro, ambos "
+       "descartados cuando las imágenes no están niveladas a aproximadamente 1 grado"),
+    PT("Requer GPS EXIF. Manter cada imagem equirretangular nivelada, câmara -Y para cima: um fator "
+       "de vertical por imagem e uma verificação de inclinação em cada registo, ambos descartados "
+       "quando as imagens não estão niveladas a cerca de 1 grau"),
+    IT("Richiede il GPS EXIF. Tenere ogni immagine equirettangolare in piano, camera -Y in alto: "
+       "un fattore di verticale per immagine e un controllo dell'inclinazione a ogni "
+       "registrazione, entrambi scartati quando le immagini non sono in piano entro circa 1 grado"),
+    NL("Vereist EXIF-GPS. Elk equirectangulair beeld waterpas houden, camera -Y omhoog: een "
+       "opwaartse factor per beeld en een kantelcontrole bij elke registratie, beide vervallen "
+       "wanneer de beelden niet tot op ongeveer 1 graad waterpas zijn"),
+    RU("Требуется EXIF GPS. Держать каждое равнопромежуточное изображение по горизонту, камера -Y "
+       "вверх: фактор вертикали на изображение и проверка наклона при каждой регистрации; оба "
+       "отключаются, если изображения не горизонтальны примерно до 1 градуса"),
+    TR("EXIF GPS gerekir. Her eşdikdörtgen görüntüyü yatay tut, kamera -Y yukarı: görüntü başına "
+       "bir yukarı faktörü ve her kayıtta bir eğim denetimi; görüntüler yaklaşık 1 derece içinde "
+       "yatay değilse ikisi de bırakılır"));
 
 SS_MSG(sensor_pairs_help,
     EN("Match images the GPS puts within --sensor-pair-radius metres of each other"),
