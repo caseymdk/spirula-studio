@@ -430,6 +430,9 @@ std::string SfmConfig::finalize(uint32_t cmd) {
     mapper.max_reproj_error = max_error;
     // mapper.sequence_window = overlap;
 
+    if (!colorspace::parse_exposure(image_exposure, exposure))
+        return "bad --image-exposure '" + image_exposure + "' (auto, or a number of stops)";
+
     if (features != "sift" && !isAlikedType(features) && !isLomaType(features))
         return "unknown --features '" + features +
                "' (sift, aliked-n16rot, aliked-n32, loma-b128 or loma-b)";
@@ -605,6 +608,12 @@ bool signatureRelevant(const char* name) {
     return true;
 }
 
+// Left out while unset, so features extracted before the flag existed still
+// match a run that does not use it.
+bool signatureOmitsUnset(const char* name) {
+    return std::strcmp(name, "image-exposure") == 0;
+}
+
 }  // namespace
 
 std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
@@ -617,7 +626,8 @@ std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
         }
     };
 #define SFM_SIG_FIELD(member, name, cmds, tier, group, lo, hi, choices, help)   \
-    if (((uint32_t)(cmds) & cmd) && (tier) != Tier::Alias && signatureRelevant(name)) \
+    if (((uint32_t)(cmds) & cmd) && (tier) != Tier::Alias && signatureRelevant(name) && \
+        !(signatureOmitsUnset(name) && valueString(cfg.member) == "none"))              \
         out += std::string(name) + "=" + valueString(cfg.member) + "\n";
     SFM_CONFIG_FIELDS(SFM_SIG_FIELD)
 #undef SFM_SIG_FIELD
@@ -648,6 +658,21 @@ std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
             out += "sequence ";
             for (size_t m = 0; m < d.members.size(); m++)
                 out += (m ? "," : "") + d.members[m];
+            out += "\n";
+        }
+    // A rig adds its mates to the pairs that verified (sfm/feature/RigPairs.h):
+    // which images share a frame, and which way each lens faces.
+    if ((cmd & CMD_MAP) || ((cmd & CMD_MATCH) && cfg.rig_pairs))
+        for (const RigDef& d : cfg.rigs) {
+            out += "rig " + d.kind + ":";
+            for (size_t c = 0; c < d.captures.size(); c++)
+                out += (c ? "," : "") + d.captures[c];
+            for (const RigMemberDef& m : d.members) {
+                out += " " + m.prefix;
+                if (!m.has_ext) continue;
+                out += "=";
+                appendParams(std::vector<double>(m.ext.R.begin(), m.ext.R.end()));
+            }
             out += "\n";
         }
     return out;

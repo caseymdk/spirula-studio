@@ -3,6 +3,7 @@
 
 #include "backend/api/BackendRuntime.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -12,7 +13,9 @@
 #include <thread>
 #include <vector>
 #include "core/Env.h"
+#include "core/GpuStall.h"
 #include "core/VulkanDeviceSelection.h"
+#include "core/VulkanMemoryBudget.h"
 
 namespace backend {
 
@@ -69,14 +72,21 @@ uint32_t pick_compute_queue_family(VkPhysicalDevice pd) {
     return best;
 }
 
+bool has_extension(VkPhysicalDevice pd, const char* name);
+
 struct DeviceProbe {
     bool required_ok = false;
+    const char* unusable = nullptr;  // why required_ok is false
     bool atomic_float = false;
     bool shader_int64 = false;
     bool shader_int8 = false;
     uint32_t queue_family = UINT32_MAX;
+    VkDriverId driver_id = (VkDriverId)0;  // 0 when the device predates 1.2
     VkPhysicalDeviceProperties props{};
     VkPhysicalDeviceSubgroupProperties subgroup{};
+    // VK_EXT_subgroup_size_control can pin compute pipelines within [min, max].
+    bool subgroup_control = false;
+    uint32_t min_subgroup = 0, max_subgroup = 0;
 };
 
 DeviceProbe probe_device(VkPhysicalDevice pd) {
@@ -99,13 +109,43 @@ DeviceProbe probe_device(VkPhysicalDevice pd) {
     p2.pNext = &out.subgroup;
     vkGetPhysicalDeviceProperties2(pd, &p2);
     out.props = p2.properties;
+    if (out.props.apiVersion >= VK_API_VERSION_1_2) {
+        VkPhysicalDeviceDriverProperties drv{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+        VkPhysicalDeviceProperties2 dp2{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        dp2.pNext = &drv;
+        vkGetPhysicalDeviceProperties2(pd, &dp2);
+        out.driver_id = drv.driverID;
+    }
+
+    if (has_extension(pd, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT sgc{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 sf2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        sf2.pNext = &sgc;
+        vkGetPhysicalDeviceFeatures2(pd, &sf2);
+        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sp{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
+        VkPhysicalDeviceProperties2 sp2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        sp2.pNext = &sp;
+        vkGetPhysicalDeviceProperties2(pd, &sp2);
+        out.subgroup_control = sgc.subgroupSizeControl && sgc.computeFullSubgroups &&
+                               (sp.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT);
+        out.min_subgroup = sp.minSubgroupSize;
+        out.max_subgroup = sp.maxSubgroupSize;
+    }
+    // 64 is the widest the kernels are tested at (AMD GCN has nothing narrower).
+    const uint32_t narrowest =
+        out.subgroup_control ? out.min_subgroup : out.subgroup.subgroupSize;
 
     out.queue_family = pick_compute_queue_family(pd);
-    out.required_ok =
-        out.props.apiVersion >= VK_API_VERSION_1_2 &&
-        f12.bufferDeviceAddress &&
-        f12.timelineSemaphore &&
-        out.queue_family != UINT32_MAX;
+    if (out.props.apiVersion < VK_API_VERSION_1_2 || !f12.bufferDeviceAddress ||
+        !f12.timelineSemaphore || out.queue_family == UINT32_MAX)
+        out.unusable = "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
+    else if (narrowest > 64)
+        out.unusable = "needs compute subgroups of 64 lanes or fewer";
+    out.required_ok = out.unusable == nullptr;
     out.atomic_float = fatomic.shaderBufferFloat32AtomicAdd;
     // Optional: without shaderInt64 the pipeline layer loads the ".noint64"
     // blob variants (32-bit index emulation); with shaderInt8 (+ 8-bit
@@ -113,6 +153,19 @@ DeviceProbe probe_device(VkPhysicalDevice pd) {
     out.shader_int64 = f2.features.shaderInt64;
     out.shader_int8 = f12.shaderInt8 && f12.storageBuffer8BitAccess;
     return out;
+}
+
+// Keyed on the driver ID, not the vendor: Mesa's Dozen (Vulkan over D3D12)
+// reports AMD's vendor ID too. Native fp32 buffer atomics start at RDNA3, and
+// RADV trains correctly on the older GPUs through the same CAS-loop shaders.
+backend::DeviceIssue device_issue(const DeviceProbe& p) {
+#ifdef _WIN32
+    if (p.props.vendorID == 0x1002 &&
+        p.driver_id == VK_DRIVER_ID_AMD_PROPRIETARY && !p.atomic_float)
+        return backend::DeviceIssue::AmdWindowsFloatAtomics;
+#endif
+    (void)p;
+    return backend::DeviceIssue::NoneKnown;
 }
 
 bool has_extension(VkPhysicalDevice pd, const char* name) {
@@ -234,9 +287,14 @@ std::string selection_error() {
     return g_selection_error;
 }
 
-const std::vector<EnumeratedDevice>& enumerate_devices() {
-    static const std::vector<EnumeratedDevice> list = [] {
-        std::vector<EnumeratedDevice> out;
+struct Enumeration {
+    std::vector<EnumeratedDevice> devices;
+    std::vector<backend::DeviceIssue> issues;  // parallel to devices
+};
+
+const Enumeration& enumeration() {
+    static const Enumeration list = [] {
+        Enumeration out;
         VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
         app.pApplicationName = "Spirula Studio";
         app.apiVersion = VK_API_VERSION_1_2;
@@ -259,15 +317,18 @@ const std::vector<EnumeratedDevice>& enumerate_devices() {
             sel::probeIdentity(devices[i], &d);
             d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
             d.usable = p.required_ok;
-            if (!p.required_ok)
-                d.unusable_reason =
-                    "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
-            out.push_back(std::move(d));
+            if (!p.required_ok) d.unusable_reason = p.unusable;
+            out.devices.push_back(std::move(d));
+            out.issues.push_back(device_issue(p));
         }
         vkDestroyInstance(inst, nullptr);
         return out;
     }();
     return list;
+}
+
+const std::vector<EnumeratedDevice>& enumerate_devices() {
+    return enumeration().devices;
 }
 
 // Selection precedence: backend::device_select (ordinal or identity) >
@@ -291,7 +352,7 @@ int resolve_device_index() {
         std::fprintf(stderr, "[spirula-vk] %s\n",
             spirula::i18n::format(
                 spirula::i18n::msg::data::vk_device_lacks_features,
-                {res.device.name}).c_str());
+                {res.device.name, res.device.unusable_reason}).c_str());
         return -1;
     }
     if (!res.ok()) {
@@ -367,9 +428,7 @@ void Context::init() {
         sel::probeIdentity(devices[i], &d);
         d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
         d.usable = pr.required_ok;
-        if (!pr.required_ok)
-            d.unusable_reason =
-                "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
+        if (!pr.required_ok) d.unusable_reason = pr.unusable;
         here.push_back(std::move(d));
     }
     // Precedence: an explicit identity request, else SS_VK_DEVICE, else Auto.
@@ -447,6 +506,12 @@ void Context::init() {
     if (const char* env = spirula::env("VK_NATIVE_INT8");
         env && env[0] == '0')
         _caps.shader_int8 = false;
+    // SS_VK_CAS_UNIFORM_EXIT=0/1 overrides the detection either way; with
+    // SS_VK_NATIVE_ATOMICS=0 it runs the workaround on any device.
+    _caps.cas_uniform_exit =
+        device_issue(probe) == backend::DeviceIssue::AmdWindowsFloatAtomics;
+    if (const char* env = spirula::env("VK_CAS_UNIFORM_EXIT"); env && env[0])
+        _caps.cas_uniform_exit = env[0] != '0';
 
     std::vector<const char*> extensions;
     // Enabling this one is mandatory, not optional: the spec forbids creating
@@ -478,53 +543,22 @@ void Context::init() {
         _caps.memory_budget = true;
     }
 
-    // Pin the compute subgroup size when the device lets us (see
-    // Capabilities::required_subgroup_size).
     VkPhysicalDeviceSubgroupSizeControlFeaturesEXT fsgc{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
-    if (has_extension(_physical,
-                      VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
-        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT probe_sgc{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
-        VkPhysicalDeviceFeatures2 probe_f2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-        probe_f2.pNext = &probe_sgc;
-        vkGetPhysicalDeviceFeatures2(_physical, &probe_f2);
-
-        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sgc_props{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
-        VkPhysicalDeviceProperties2 sgc_p2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-        sgc_p2.pNext = &sgc_props;
-        vkGetPhysicalDeviceProperties2(_physical, &sgc_p2);
-
-        if (probe_sgc.subgroupSizeControl && probe_sgc.computeFullSubgroups &&
-            (sgc_props.requiredSubgroupSizeStages &
-             VK_SHADER_STAGE_COMPUTE_BIT)) {
-            uint32_t want = _caps.subgroup_size;
-            if (want < sgc_props.minSubgroupSize)
-                want = sgc_props.minSubgroupSize;
-            if (want > sgc_props.maxSubgroupSize)
-                want = sgc_props.maxSubgroupSize;
-            if (want > 32)  // TODO: not supported by shaders
-                want = 32;
-            _caps.required_subgroup_size = want;
-            extensions.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
-            fsgc.subgroupSizeControl = VK_TRUE;
-            fsgc.computeFullSubgroups = VK_TRUE;
-            fsgc.pNext = f12.pNext;
-            f12.pNext = &fsgc;
+    if (probe.subgroup_control) {
+        _caps.subgroup_min = probe.min_subgroup;
+        _caps.subgroup_max = probe.max_subgroup;
+        if (const char* env = spirula::env("VK_SUBGROUP"); env && env[0]) {
+            const uint32_t w = (uint32_t)std::strtoul(env, nullptr, 10);
+            if (w && !(w & (w - 1)))  // a power of two
+                _caps.subgroup_force =
+                    std::min(std::max(w, _caps.subgroup_min), _caps.subgroup_max);
         }
-    }
-    // Several kernels index subgroups as tid / WaveGetLaneCount() against a
-    // 32-wide workgroup, so a wider unpinned subgroup makes the count 0 and
-    // the result silently wrong (rasterize_bwd's survivor compaction).
-    if (!_caps.required_subgroup_size && _caps.subgroup_size > 32) {
-        std::fprintf(stderr,
-            "[spirula-vk] warning: %s reports subgroup size %u and does not "
-            "support VK_EXT_subgroup_size_control, which this build needs to "
-            "pin it to 32. Training results on this device are not trusted.\n",
-            _device_name.c_str(), _caps.subgroup_size);
+        extensions.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        fsgc.subgroupSizeControl = VK_TRUE;
+        fsgc.computeFullSubgroups = VK_TRUE;
+        fsgc.pNext = f12.pNext;
+        f12.pNext = &fsgc;
     }
 
     VkPhysicalDeviceFeatures features{};
@@ -562,9 +596,8 @@ void Context::init() {
     // Poll-based waits by default on real GPUs; SS_VK_POLL_WAIT=0/1
     // forces either mode (mainly for A/B timing). Not on Apple: the spinning
     // core shares the SoC's power budget (M5, 1000 steps: 54.3 s vs 48.7 s).
-    _poll_waits =
-        probe.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU &&
-        probe.props.vendorID != 0x106B;
+    _cpu_device = probe.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+    _poll_waits = !_cpu_device && probe.props.vendorID != 0x106B;
     if (const char* env = spirula::env("VK_POLL_WAIT"); env && env[0])
         _poll_waits = env[0] != '0';
 
@@ -574,16 +607,18 @@ void Context::init() {
     g_context_created.store(true);
 
     if (spirula::env("VK_VERBOSE")) {
-        // The pinned size is what the shaders actually run at; printing the
-        // device default alone reads as "the pin did not happen".
-        char subgroup[48];
-        if (_caps.required_subgroup_size == _caps.subgroup_size)
+        char subgroup[64];
+        if (_caps.subgroup_force)
+            std::snprintf(subgroup, sizeof(subgroup), "%u (SS_VK_SUBGROUP)",
+                          _caps.subgroup_force);
+        else if (_caps.subgroup_min == _caps.subgroup_max && _caps.subgroup_max)
             std::snprintf(subgroup, sizeof(subgroup), "%u (pinned)",
-                          _caps.required_subgroup_size);
-        else if (_caps.required_subgroup_size)
+                          _caps.subgroup_max);
+        else if (_caps.subgroup_max)
             std::snprintf(subgroup, sizeof(subgroup),
-                          "%u (pinned, device default %u)",
-                          _caps.required_subgroup_size, _caps.subgroup_size);
+                          "%u..%u (pinned per kernel, device default %u)",
+                          _caps.subgroup_min, _caps.subgroup_max,
+                          _caps.subgroup_size);
         else
             std::snprintf(subgroup, sizeof(subgroup), "%u (unpinned)",
                           _caps.subgroup_size);
@@ -592,7 +627,9 @@ void Context::init() {
             "float-atomic-add %s, int64 %s, int8 %s, timestamps %s\n",
             _device_name.c_str(), deviceTypeName(probe.props.deviceType),
             subgroup, _caps.max_push_constants,
-            _caps.float32_atomic_add ? "native" : "EMULATED",
+            _caps.float32_atomic_add ? "native"
+            : _caps.cas_uniform_exit ? "EMULATED (uniform exit)"
+                                     : "EMULATED",
             _caps.shader_int64 ? "native" : "EMULATED",
             _caps.shader_int8 ? "native" : "emulated",
             _caps.timestamps ? "yes" : "no");
@@ -658,12 +695,27 @@ bool Context::wait(uint64_t value) {
     wi.semaphoreCount = 1;
     wi.pSemaphores = &_timeline;
     wi.pValues = &value;
-    VkResult r = vkWaitSemaphores(_device, &wi, UINT64_MAX);
-    if (r != VK_SUCCESS) {
-        set_error("vkWaitSemaphores failed", r);
-        return false;
+    spirula::GpuStallWatch watch(_cpu_device);
+    for (;;) {
+        VkResult r = vkWaitSemaphores(_device, &wi, spirula::GpuStallWatch::kSliceNs);
+        if (r == VK_SUCCESS) return true;
+        if (r != VK_TIMEOUT) {
+            set_error("vkWaitSemaphores failed", r);
+            return false;
+        }
+        uint64_t current = 0;
+        r = vkGetSemaphoreCounterValue(_device, _timeline, &current);
+        if (r != VK_SUCCESS) {
+            set_error("vkGetSemaphoreCounterValue failed", r);
+            return false;
+        }
+        if (watch.stalled(current)) {
+            set_error("the GPU stopped responding: no work finished for a minute (the driver may have "
+                      "reset it, often after running out of GPU memory; SS_GPU_STALL_SECONDS sets the wait)",
+                      VK_ERROR_DEVICE_LOST);
+            return false;
+        }
     }
-    return true;
 }
 
 uint32_t Context::find_memory_type(uint32_t type_bits,
@@ -693,6 +745,7 @@ DeviceInfo device_info(int index) {
     info.uuid = sel::selectorFor(d);
     info.vram_bytes = d.vram_bytes;
     info.usable = d.usable;
+    info.issue = vk::enumeration().issues[index];
     return info;
 }
 
@@ -780,6 +833,12 @@ int device_current() {
     return vk::resolve_device_index();
 }
 
+int device_resolve(const std::string& selector, bool explicit_set) {
+    const sel::Resolution res = sel::resolveRequest(
+        sel::requestFrom(selector, explicit_set), vk::enumerate_devices());
+    return res.ok() ? res.device.index : -1;
+}
+
 MemoryUsage memory_usage() {
     MemoryUsage m;
     const int idx = device_current();
@@ -791,30 +850,10 @@ MemoryUsage memory_usage() {
     m.process_bytes = vk::g_device_bytes.load(std::memory_order_relaxed);
     m.has_process = true;
 
-    // System-wide "in use" needs a live device with VK_EXT_memory_budget.
-    // heapBudget already discounts memory held by other applications, so
-    //   system_free ~= sum(budget - usage) over device-local heaps
-    //   system_used  = total - system_free
-    // (an estimate; Vulkan exposes no exact system-wide counter). Never call
-    // Context::get() before it exists — that would create the device just to
-    // read a status number.
+    // heapBudget discounts other applications; querying must not create a device.
     if (vk::g_context_created.load() && vk::Context::get().ok() &&
         vk::Context::get().caps().memory_budget && m.has_total) {
-        VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
-        VkPhysicalDeviceMemoryProperties2 mp2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2};
-        mp2.pNext = &budget;
-        vkGetPhysicalDeviceMemoryProperties2(vk::Context::get().physical(),
-                                             &mp2);
-        uint64_t free_head = 0;
-        const auto& mp = mp2.memoryProperties;
-        for (uint32_t i = 0; i < mp.memoryHeapCount; i++) {
-            if (!(mp.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT))
-                continue;
-            const uint64_t b = budget.heapBudget[i], u = budget.heapUsage[i];
-            if (b > u) free_head += b - u;
-        }
+        const uint64_t free_head = spirula::vkmemory::queryBudget(vk::Context::get().physical()).available_bytes;
         if (free_head <= m.total_bytes) {
             m.used_bytes = m.total_bytes - free_head;
             m.has_used = true;

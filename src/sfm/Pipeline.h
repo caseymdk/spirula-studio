@@ -52,6 +52,10 @@ struct ExtractStats {
     std::string first_unmasked;   // an example, for the warning
     bool warned_empty = false;    // "this mask masked out everything", warned once
     bool warned_exif_mirror = false;   // "the tag also asked for a mirror", ditto
+    // Over the images this run decoded (GrayImage::gain, ::peak).
+    size_t decoded = 0;
+    float gain_min = 1.0f, gain_max = 1.0f;
+    float peak = 0.0f;
 };
 
 struct MatchStats {
@@ -171,10 +175,11 @@ struct VerifyCalibration {
 // ---------------------------------------------------------------------------
 
 // Features for every image under `imagedir`, written to `outdir` mirroring the
-// image tree. `reuse` keeps what an earlier run left there when it is whole and
-// newer than what it describes; a file no image maps to is removed either way.
+// image tree. `reuse` keeps a whole file newer than its image and mask, and with
+// `trusted` an older one too, listed there; a file no image maps to is removed.
 int extractDirectory(const std::string& imagedir, const std::filesystem::path& outdir,
-                     const SfmConfig& cfg, ExtractStats& stats, bool reuse = false);
+                     const SfmConfig& cfg, ExtractStats& stats, bool reuse = false,
+                     std::vector<std::filesystem::path>* trusted = nullptr);
 
 // Where an interrupted run's matching left its work, and what those files must
 // carry to be this run's (sfm/core/Resume.h). Null is a run that starts over.
@@ -262,10 +267,10 @@ void warnIfMasksLookInverted(const ExtractStats& st);
 void sampleFeatureColors(FeatureSet& fs, const GrayImage& img);
 void finishFeatures(FeatureSet& fs, const GrayImage& img);
 
-// An EXR capture states its own colour space; adopt it for any of
-// `image-gamut` / `image-linear` that `seen` does not already name.
-void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
-                        const std::set<std::string>& seen);
+// An EXR or a TIFF with an ICC profile states its own colour space; adopt it
+// for any of `image-gamut` / `image-linear` that `seen` does not already name.
+void adoptFileColorSpace(SfmConfig& cfg, const std::string& imagedir,
+                         const std::set<std::string>& seen);
 
 bool holdsImagesOutside(const std::filesystem::path& root,
                         const std::filesystem::path& nested);

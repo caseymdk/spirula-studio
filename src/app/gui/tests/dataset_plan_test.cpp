@@ -2,8 +2,12 @@
 // (app/gui/DatasetPlan.h), against records written into a scratch workspace
 // the way a run writes them.
 
+#include "app/LidarDataset.h"
 #include "app/gui/DatasetPlan.h"
 #include "app/gui/SfmRunner.h"
+#include "sfm/core/Resume.h"
+#include "dense/Artifact.h"
+#include "data/JsonWrite.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -139,6 +143,15 @@ int main() {
                    p[Step::Model].act == Act::Reuse && !p.ask(),
                "the same settings reuse every step");
         expect(p[Step::Geometry].act == Act::None, "geometry off is not a step");
+    }
+    {
+        SfmJob scans = made;
+        scans.lidar.clouds = {"/scan.e57"};
+        scans.lidar.scanner_only = true;
+        scans.geometry.enable = true;
+        const DatasetPlan p = plan(scans);
+        expect(p[Step::Model].act == Act::None && p[Step::Geometry].act == Act::None,
+               "a scan's photographs at its poses: no reconstruction, no geometry step");
     }
     {
         SfmJob j = made;
@@ -292,6 +305,270 @@ int main() {
                "... and the model built from the frames before them is not trusted");
     }
 
+    // ---- the reconstruction's own stages ---------------------------------------
+    build(ws, made);
+    {
+        PlanRequest redo;
+        redo.redo_model = true;
+        DatasetPlan p = plan(made, redo);
+        expect(p[ModelPart::Features].act == Act::Run && p[ModelPart::Matching].act == Act::Run &&
+                   p[ModelPart::Mapping].act == Act::Redo &&
+                   p[ModelPart::Align].act == Act::None,
+               "nothing of `spirula sfm`'s to reuse: extract, match, map again");
+        touch(ws / "features" / "cam0" / "00010.jpg.bin");
+        touch(ws / "matches.bin");
+        touch(ws / sfm::resume::kDir / sfm::resume::kExtractSig);
+        touch(ws / sfm::resume::kDir / sfm::resume::kMatchSig);
+        p = plan(made, redo);
+        expect(p[ModelPart::Features].act == Act::Reuse &&
+                   p[ModelPart::Matching].act == Act::Reuse &&
+                   p[ModelPart::Mapping].act == Act::Redo &&
+                   p[ModelPart::Mapping].why == Why::Requested,
+               "reconstructing again on the same settings only maps again");
+        expect(plan(made)[ModelPart::Mapping].act == Act::None,
+               "a reused reconstruction runs none of its stages");
+        std::ofstream(ws / sfm::resume::kDir / sfm::resume::kExtractSig)
+            << "features=sift\n" << sfm::resume::kSignedImages << "/elsewhere/images\n";
+        p = plan(made, redo);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Features].why == Why::Moved,
+               "features extracted from images somewhere else are extracted again");
+        std::ofstream(ws / sfm::resume::kDir / sfm::resume::kExtractSig)
+            << "features=sift\n" << sfm::resume::kSignedImages << (ws / "images").string() << "\n";
+        expect(plan(made, redo)[ModelPart::Features].act == Act::Reuse,
+               "... and ones from these images are not");
+
+        SfmJob j = made;
+        j.features = (int)std::size(kSfmFeatures) - 1;
+        p = plan(j);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Features].why == Why::Settings &&
+                   p[ModelPart::Matching].why == Why::Features &&
+                   p[ModelPart::Mapping].why == Why::Matches,
+               "another frontend extracts again, and the stages after it follow");
+        j = made;
+        j.loop_closure = false;
+        p = plan(j);
+        expect(p[ModelPart::Features].act == Act::Reuse &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].changes.size() == 1 &&
+                   p[ModelPart::Matching].changes[0].key == "loop_closure" &&
+                   p[ModelPart::Features].changes.empty(),
+               "a pairing setting keeps the features and matches again, naming itself");
+        j = made;
+        j.prep.inputs[0].rig = kRigNone;
+        p = plan(j);
+        expect(p[ModelPart::Features].act == Act::Reuse &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].why == Why::Settings,
+               "a rig changes the pairs matched, so it matches again");
+        j = made;
+        j.mapper = 1;
+        p = plan(j);
+        expect(p[ModelPart::Matching].act == Act::Reuse &&
+                   p[ModelPart::Mapping].act == Act::Redo &&
+                   p[ModelPart::Mapping].why == Why::Settings,
+               "a mapper setting only maps again");
+        j = made;
+        j.prep.mask_dilate_ratio = 0.08f;
+        p = plan(j, redo);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Features].why == Why::Masks &&
+                   p[ModelPart::Matching].why == Why::Features,
+               "new masks re-extract the images they cover");
+        j = made;
+        j.prep.video_fps = 3.0f;
+        p = plan(j);
+        expect(p[ModelPart::Features].why == Why::Frames &&
+                   p[ModelPart::Features].lock == Lock::Frames,
+               "new frames re-extract every image, and the old points cannot be kept");
+    }
+
+    // ---- stages the user keeps or runs against the plan ------------------------
+    {
+        PlanRequest keep_matches;
+        keep_matches.parts[(int)ModelPart::Matching] = PartChoice::Keep;
+        SfmJob j = made;
+        j.prep.inputs[0].rig = kRigNone;
+        DatasetPlan p = plan(j, keep_matches);
+        expect(p[ModelPart::Matching].act == Act::Keep &&
+                   p[ModelPart::Mapping].act == Act::Redo &&
+                   p[ModelPart::Features].act == Act::Reuse,
+               "a rig change can keep the matches and only map again");
+        expect(p[ModelPart::Mapping].lock == Lock::Always,
+               "... and mapping itself is never skipped on its own");
+
+        j = made;
+        j.features = 2;
+        PlanRequest keep_features;
+        keep_features.parts[(int)ModelPart::Features] = PartChoice::Keep;
+        p = plan(j, keep_features);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Features].lock == Lock::Frontend,
+               "feature points of another type are not kept");
+        j = made;
+        j.max_features = 1000;
+        p = plan(j, keep_features);
+        expect(p[ModelPart::Features].act == Act::Keep &&
+                   p[ModelPart::Matching].act == Act::Reuse,
+               "kept feature points keep the matches over them");
+
+        PlanRequest both = keep_matches;
+        p = plan(j, both);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].lock == Lock::Before,
+               "matches over feature points made again are not kept");
+
+        j = made;
+        j.prep.inputs[0].camera_model = "opencv-fisheye";
+        j.camera_model = "opencv-fisheye";
+        p = plan(j, keep_matches);
+        expect(p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].lock == Lock::Lens,
+               "matches verified with another lens are not kept");
+
+        PlanRequest force;
+        force.redo_model = true;
+        force.parts[(int)ModelPart::Matching] = PartChoice::Run;
+        p = plan(made, force);
+        expect(p[ModelPart::Features].act == Act::Reuse &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].why == Why::Requested &&
+                   p[ModelPart::Mapping].why == Why::Matches,
+               "a current stage can be made again, and the ones after it follow");
+        force.parts[(int)ModelPart::Matching] = PartChoice::Keep;
+        force.parts[(int)ModelPart::Features] = PartChoice::Run;
+        p = plan(made, force);
+        expect(p[ModelPart::Features].act == Act::Redo &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].lock == Lock::Before,
+               "... and a stage after one that runs cannot be kept");
+    }
+    {
+        SfmJob j = made;
+        j.lidar.clouds = {"/scans/a.e57"};
+        DatasetPlan p = plan(j);
+        expect(p[Step::Model].act == Act::Reuse && p[ModelPart::Align].act == Act::Run &&
+                   p[ModelPart::Features].act == Act::None,
+               "scans added to a finished reconstruction: only the alignment runs");
+        std::ofstream(ws / "sparse" / "0" / app::lidar::kAlignedMarker)
+            << R"({"clouds": ["/scans/a.e57"], "mode": "auto"})";
+        expect(plan(j)[ModelPart::Align].act == Act::Reuse,
+               "an alignment to the same scans is reused");
+        PlanRequest force;
+        force.parts[(int)ModelPart::Align] = PartChoice::Run;
+        p = plan(j, force);
+        expect(p[ModelPart::Align].act == Act::Redo && p[ModelPart::Align].why == Why::Requested,
+               "... unless it is asked for again");
+        j.lidar.clouds.push_back("/scans/b.e57");
+        expect(plan(j)[ModelPart::Align].act == Act::Redo, "... and redone for another scan");
+        PlanRequest keep;
+        keep.parts[(int)ModelPart::Align] = PartChoice::Keep;
+        expect(plan(j, keep)[ModelPart::Align].act == Act::Keep,
+               "... or kept, when the user says so");
+        keep.redo_model = true;
+        p = plan(j, keep);
+        expect(p[ModelPart::Align].act == Act::Redo && p[ModelPart::Align].lock == Lock::Before,
+               "... but never over a new reconstruction");
+        j.lidar.clouds.pop_back();
+        j.lidar.in_frame = true;
+        expect(plan(j)[ModelPart::Align].act == Act::Redo,
+               "... or for a model said to be in the scans' frame already");
+        j.lidar.in_frame = false;
+        PlanRequest redo;
+        redo.redo_model = true;
+        p = plan(j, redo);
+        expect(p[ModelPart::Align].act == Act::Redo && p[ModelPart::Align].why == Why::Model,
+               "a new reconstruction is aligned again");
+    }
+    build(ws, made);
+    {
+        SfmJob j = made;
+        expect(plan(j)[Step::Dense].act == Act::None, "old settings keep dense processing disabled");
+        j.dense.enable = true;
+        expect(plan(j)[Step::Dense].act == Act::Run, "enabling dense starts its own step");
+        touch(ws / "dense" / "roma.ply");
+        expect(spirula::dense::is_dense_seed(ws.string(), (ws / "dense" / "roma.ply").string()) &&
+               spirula::dense::is_dense_seed(ws.string(), "dense/roma.ply") &&
+               !spirula::dense::is_dense_seed(ws.string(), "other.ply"), "dense seed mask mode recognizes absolute and dataset-relative paths");
+        const auto source = ws / "input-to-watch.txt";
+        touch(source);
+        const std::vector<std::string> watched{source.string()};
+        auto write_manifest = [&](int revision = spirula::dense::reconstruction_revision) {
+            JsonWriter manifest; manifest.object().field("complete", true).field("cloud_sha256", spirula::sha256_file((ws / "dense" / "roma.ply").string()));
+            manifest.field("reconstruction_revision",revision);
+            manifest.field("cloud_bytes", 1).field("input_stamp", spirula::dense::input_stamp(watched));
+            manifest.field("input_content_stamp",spirula::dense::input_content_stamp(watched));
+            manifest.key("input_paths").array().value(source.generic_string()).end();
+            manifest.key("statistics").object().field("exported", 1).end().end();
+            std::ofstream(ws / "dense" / "manifest.json") << manifest.str();
+        };
+        write_manifest();
+        StepRecorder rec(ws.string(), read_dataset_record(ws.string()));
+        rec.begin(Step::Dense, dense_fields(j.dense), {"roma.ply"}); rec.finish(Step::Dense);
+        expect(plan(j)[Step::Dense].act == Act::Reuse, "completed dense settings are reused");
+        {
+            auto legacy = j;
+            legacy.dense.config.pairs.reference_coverage = 0;
+            StepRecorder old(ws.string(), read_dataset_record(ws.string()));
+            old.begin(Step::Dense, dense_fields(legacy.dense), {"roma.ply"}); old.finish(Step::Dense);
+            expect(plan(legacy)[Step::Dense].act == Act::Reuse, "a record from before reference coverage stays fresh at coverage 0");
+            legacy.dense.config.pairs.reference_coverage = 2;
+            expect(plan(legacy)[Step::Dense].act == Act::Redo, "a reference coverage change invalidates dense output");
+            StepRecorder again(ws.string(), read_dataset_record(ws.string()));
+            again.begin(Step::Dense, dense_fields(j.dense), {"roma.ply"}); again.finish(Step::Dense);
+        }
+        std::atomic<bool> verification_cancel{false};
+        auto verified = plan(j); verify_dense_reuse(verified,ws.string(),verification_cancel);
+        expect(verified[Step::Dense].act == Act::Reuse,"dense reuse verifies source contents and cloud checksum");
+        write_manifest(spirula::dense::reconstruction_revision - 1);
+        expect(spirula::dense::artifact_complete(ws.string()) && plan(j)[Step::Dense].act == Act::Run,
+               "an older reconstruction remains loadable but is regenerated by processing");
+        write_manifest();
+        const auto original_time = fs::last_write_time(source);
+        { std::ofstream changed(source,std::ios::binary | std::ios::trunc); changed << "y"; }
+        fs::last_write_time(source,original_time);
+        verified = plan(j); verify_dense_reuse(verified,ws.string(),verification_cancel);
+        expect(verified[Step::Dense].act == Act::Redo,"same-size same-time content edits reject dense reuse");
+        write_manifest();
+        j.dense.config.matching_space = "source";
+        expect(plan(j)[Step::Dense].act == Act::Redo, "source image matching invalidates dense output");
+        j.dense.config.matching_space = "rectified";
+        j.dense.config.source_reprojection_error = 0.04;
+        expect(plan(j)[Step::Dense].act == Act::Redo, "source pixel tolerance participates in saved settings");
+        j.dense.config.source_reprojection_error = spirula::dense::DenseConfig{}.source_reprojection_error;
+        j.dense.config.use_masks = false;
+        expect(plan(j)[Step::Dense].act == Act::Redo, "mask toggle invalidates the dense artifact");
+        j.dense.config.use_masks = true;
+        j.dense.config.match.precision = spirula::roma::InferencePrecision::Float32;
+        expect(plan(j)[Step::Dense].act == Act::Redo, "precision changes invalidate the dense artifact");
+        j.dense.config.match.precision = spirula::roma::InferencePrecision::Automatic;
+        j.dense.config.sparse_face_pairs = false;
+        expect(plan(j)[Step::Dense].act == Act::Redo, "face selection changes invalidate the dense artifact");
+        j.dense.config.sparse_face_pairs = true;
+        std::ofstream(source, std::ios::app) << "changed";
+        expect(plan(j)[Step::Dense].act == Act::Run, "external input changes invalidate the dense artifact");
+        write_manifest();
+        std::ofstream(ws / "dense" / "roma.ply", std::ios::app) << "truncated replacement";
+        expect(plan(j)[Step::Dense].act == Act::Run, "an output with a mismatched size is regenerated");
+        touch(ws / "dense" / "roma.ply");
+        j.dense.use_for_training = false;
+        j.dense.config.image_cache_bytes = 123456789;
+        expect(plan(j)[Step::Dense].act == Act::Reuse, "training selection and cache budget do not invalidate dense output");
+        j.dense.config.min_overlap = 0.7;
+        const auto changed = plan(j);
+        expect(changed[Step::Dense].act == Act::Redo && changed[Step::Model].act == Act::Reuse,
+               "dense filtering changes do not rerun SfM");
+        PlanRequest redo; redo.redo_model = true;
+        expect(plan(j, redo)[Step::Dense].why == Why::Model, "reconstruction changes invalidate dense output");
+        redo = {}; redo.redo_dense = true;
+        expect(plan(j, redo)[Step::Dense].why == Why::Requested && plan(j, redo)[Step::Model].act == Act::Reuse,
+               "dense-only redo leaves the camera reconstruction reusable");
+        j.dense.enable = false;
+        expect(plan(j)[Step::Dense].act == Act::None, "disabling dense keeps its artifact without running it");
+    }
+
     // ---- depth and normals ---------------------------------------------------
     build(ws, made);
     {
@@ -369,6 +646,40 @@ int main() {
         expect(in.sequential && in.subcameras[0].rig == kRigOwn &&
                    in.subcameras[1].rig_dual_fisheye,
                "... and the camera folders their rig and order");
+    }
+
+    // ---- the video behind the frames, for a run that keeps them ---------------
+    {
+        build(ws, made);
+        std::vector<PrepCapture> c = recorded_captures(ws.string(), made.prep);
+        // Absolute as the record keeps it: Windows puts the current drive in front.
+        const std::string walk = fs::absolute("/captures/walk.insv").lexically_normal().generic_string();
+        expect(c.size() == 1 && c[0].path == walk && c[0].subdir.empty(),
+               "the frames' fields name the video they were cut from");
+        SfmJob f = made;
+        f.prep.force_external_decode = true;
+        StepRecorder r(ws.string(), read_dataset_record(ws.string()));
+        r.begin(Step::Frames, frames_fields(f.prep));
+        r.finish(Step::Frames);
+        c = recorded_captures(ws.string(), f.prep);
+        expect(c.size() == 1 && c[0].fps == 6.0,
+               "ffmpeg's stems count candidates at the rate times the window");
+        const fs::path video = fs::temp_directory_path() / "spirula_dataset_plan_test.insv";
+        touch(video);
+        r.begin(Step::Frames, frames_fields(made.prep));
+        r.finish(Step::Frames, {{"", video.string(), 7.5, true}});
+        c = recorded_captures(ws.string(), made.prep);
+        expect(c.size() == 1 && c[0].fps == 7.5 && c[0].lockstep,
+               "what the extraction recorded wins over the fields");
+        SfmJob d = dropped_images(ws, made);
+        c = captures_behind(d.prep);
+        expect(c.size() == 1 && c[0].path == video.string() && c[0].subdir.empty(),
+               "the dataset's images/ dropped back in keeps its video");
+        d.prep.inputs[0].subdir = "walk";
+        c = captures_behind(d.prep);
+        expect(c.size() == 1 && c[0].subdir == "walk", "... under the folder it is gathered into");
+        fs::remove(video);
+        expect(captures_behind(d.prep).empty(), "... while the video is still there");
     }
 
     // ---- "the same as above" chains down the list; every frame is a rate ------

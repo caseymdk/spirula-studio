@@ -48,6 +48,19 @@ function(ss_configure_app target)
 endfunction()
 
 # ---------------------------------------------------------------------------
+# ss_dense -- the dense point cloud's host core (src/dense/), for every app and
+# test. Kept out of the engine library: it builds on sfm/'s header-only
+# geometry and roma/'s option types, which the trainer must not reach.
+# ---------------------------------------------------------------------------
+file(GLOB SS_DENSE_SOURCES CONFIGURE_DEPENDS ${SS_SRC}/dense/*.cpp)
+add_library(ss_dense STATIC ${SS_DENSE_SOURCES})
+target_include_directories(ss_dense PRIVATE ${SS_SRC} ${CMAKE_BINARY_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+target_link_libraries(ss_dense PUBLIC ${SS_APP_LIBS})
+target_compile_options(ss_dense PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
+set_property(TARGET ss_dense PROPERTY CXX_STANDARD 17)
+set(SS_APP_LIBS ss_dense ${SS_APP_LIBS})
+
+# ---------------------------------------------------------------------------
 # Which tools this build has
 #
 # Each block appends the tool's sources, the macro that declares its entry
@@ -92,12 +105,25 @@ list(APPEND SS_TOOL_DEFS SS_TOOL_TRAIN=1)
 # Host-only over the parsers and the splat PLY reader, so every build has it.
 list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/partition_main.cpp)
 list(APPEND SS_TOOL_DEFS SS_TOOL_PARTITION=1)
+list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/dense_main.cpp)
+list(APPEND SS_TOOL_DEFS SS_TOOL_DENSE=1)
 
 # ---- mesh extraction ----
 # Both backends: the host side is portable (mesh/OccupancyEvaluator.cpp) and
 # each has kernels (mesh/Meshing.cu, backend/vulkan/kernels/Meshing.cpp).
 list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/mesh_main.cpp)
 list(APPEND SS_TOOL_DEFS SS_TOOL_MESH=1)
+
+# ---- a dataset from an E57 laser scan: host only, both backends ----
+list(APPEND SS_TOOL_SOURCES
+     ${SS_SRC}/app/cli/e57_main.cpp
+     ${SS_SRC}/app/cli/lidar_main.cpp
+     ${SS_SRC}/app/E57Dataset.cpp
+     ${SS_SRC}/app/LidarAlign.cpp
+     ${SS_SRC}/app/LidarDataset.cpp
+     ${SS_SRC}/app/ScanDepth.cpp
+     ${SS_SRC}/app/DepthPng.cpp)
+list(APPEND SS_TOOL_DEFS SS_TOOL_E57=1)
 
 if(SS_BUILD_SFM)
     # ---- structure from motion ----
@@ -122,6 +148,7 @@ if(SS_BUILD_SAM)
          ${SS_SRC}/app/FfmpegVideo.cpp
          ${SS_SRC}/app/gui/Subprocess.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_SAM=1)
+    list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/LicenseCli.cpp)
     list(APPEND SS_TOOL_LIBS ss_sam)
     if(SS_ENABLE_PATENTED)
         list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/FrameDecodeVulkan.cpp)
@@ -140,7 +167,9 @@ if(SS_BUILD_SAM)
          ${SS_SRC}/app/GeometryWarp.cpp
          ${SS_SRC}/app/DepthPng.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_GEOMETRY=1)
-    list(APPEND SS_TOOL_LIBS ss_metric3d ss_moge)
+    list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/DenseProcessing.cpp)
+    list(APPEND SS_TOOL_DEFS SS_HAVE_ROMA=1)
+    list(APPEND SS_TOOL_LIBS ss_metric3d ss_moge ss_roma)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -263,6 +292,8 @@ endif()
 # ---------------------------------------------------------------------------
 # spirula -- the executable
 # ---------------------------------------------------------------------------
+# The GUI's licence dialog and the CLI's prompt read the same record.
+list(APPEND SS_TOOL_LIBS ss_license)
 # The frame extraction and ffmpeg files are claimed by both the segmentation
 # tool and the GUI.
 list(REMOVE_DUPLICATES SS_TOOL_SOURCES)
@@ -329,8 +360,8 @@ if(SS_SEPARATE_TOOLS)
                      ${SS_SRC}/app/FrameSharpness.cpp ${SS_SRC}/app/Pano360.cpp
                      ${SS_SRC}/app/cli/sam_extract.cpp ${SS_SRC}/app/FrameExtract.cpp
                      ${SS_SRC}/app/FrameDecodeFfmpeg.cpp ${SS_SRC}/app/FfmpegVideo.cpp
-                     ${SS_SRC}/app/gui/Subprocess.cpp)
-        set(_sam_lib ss_sam)
+                     ${SS_SRC}/app/gui/Subprocess.cpp ${SS_SRC}/app/cli/LicenseCli.cpp)
+        set(_sam_lib ss_sam ss_license)
         if(SS_ENABLE_PATENTED)
             list(APPEND _sam_src ${SS_SRC}/app/FrameDecodeVulkan.cpp)
             list(APPEND _sam_lib ss_video)
@@ -346,12 +377,21 @@ endif()
 # ---------------------------------------------------------------------------
 file(GLOB SS_CORE_TESTS CONFIGURE_DEPENDS
      ${SS_SRC}/core/tests/*.cpp ${SS_SRC}/data/tests/*.cpp
+     ${SS_SRC}/dense/tests/*.cpp
      ${SS_SRC}/mesh/tests/*.cpp)
 foreach(test_src ${SS_CORE_TESTS})
     get_filename_component(test_name ${test_src} NAME_WE)
     add_executable(${test_name} ${test_src})
     ss_configure_app(${test_name})
 endforeach()
+
+if(SS_BUILD_SAM)
+    add_executable(dense_camera_test
+        ${SS_SRC}/app/tests/dense_camera_test.cpp
+        ${SS_SRC}/app/GeometryWarp.cpp)
+    ss_configure_app(dense_camera_test)
+    target_link_libraries(dense_camera_test PRIVATE ss_nn)
+endif()
 
 # The frame plan: no device, no GUI, and a wrong answer is silent.
 add_executable(frame_motion_test
@@ -360,10 +400,43 @@ add_executable(frame_motion_test
     ${SS_SRC}/app/Pano360.cpp)
 ss_configure_app(frame_motion_test)
 
+add_executable(model_download_test
+    ${SS_SRC}/app/tests/model_download_test.cpp
+    ${SS_SRC}/app/gui/ModelCache.cpp
+    ${SS_SRC}/app/gui/Subprocess.cpp
+    ${SS_SRC}/app/AppPaths.cpp)
+ss_configure_app(model_download_test)
+target_link_libraries(model_download_test PRIVATE ss_license)
+
 add_executable(packed_lens_test
     ${SS_SRC}/app/tests/packed_lens_test.cpp
     ${SS_SRC}/app/Pano360.cpp)
 ss_configure_app(packed_lens_test)
+
+# A scan written out as a dataset, then read back by the trainer's parser.
+add_executable(e57_dataset_test
+    ${SS_SRC}/app/tests/e57_dataset_test.cpp
+    ${SS_SRC}/app/E57Dataset.cpp
+    ${SS_SRC}/app/ScanDepth.cpp
+    ${SS_SRC}/app/DepthPng.cpp)
+ss_configure_app(e57_dataset_test)
+
+add_executable(scan_depth_test
+    ${SS_SRC}/app/tests/scan_depth_test.cpp
+    ${SS_SRC}/app/ScanDepth.cpp)
+ss_configure_app(scan_depth_test)
+
+add_executable(lidar_align_test
+    ${SS_SRC}/app/tests/lidar_align_test.cpp
+    ${SS_SRC}/app/LidarAlign.cpp
+    ${SS_SRC}/app/E57Dataset.cpp
+    ${SS_SRC}/app/ScanDepth.cpp
+    ${SS_SRC}/app/DepthPng.cpp)
+ss_configure_app(lidar_align_test)
+
+add_executable(system_recorder_test
+    ${SS_SRC}/app/tests/system_recorder_test.cpp)
+ss_configure_app(system_recorder_test)
 
 # The stencil shapes, spelling and fill, with no GUI: FrameMask.cpp is compiled
 # into the CLI too, so this must link without imgui.
@@ -383,9 +456,26 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/Subprocess.cpp)
     ss_configure_app(command_argv_test)
 
+    add_executable(dense_live_preview_test
+        ${SS_SRC}/app/gui/tests/dense_live_preview_test.cpp
+        ${SS_SRC}/app/gui/SfmProgress.cpp
+        ${SS_SRC}/app/gui/PreviewRenderer.cpp
+        ${SS_SRC}/app/gui/GlLoader.cpp)
+    ss_configure_app(dense_live_preview_test)
+    target_link_libraries(dense_live_preview_test PRIVATE glfw OpenGL::GL)
+
     add_executable(align_fit_test
         ${SS_SRC}/app/gui/tests/align_fit_test.cpp)
     ss_configure_app(align_fit_test)
+
+    add_executable(stage_eta_test
+        ${SS_SRC}/app/gui/tests/stage_eta_test.cpp)
+    ss_configure_app(stage_eta_test)
+
+    add_executable(recent_list_test
+        ${SS_SRC}/app/gui/tests/recent_list_test.cpp
+        ${SS_SRC}/app/gui/RecentList.cpp)
+    ss_configure_app(recent_list_test)
 
     add_executable(attributes_test
         ${SS_SRC}/app/gui/tests/attributes_test.cpp
@@ -491,4 +581,15 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameMotion.cpp
         ${SS_SRC}/app/Pano360.cpp)
     ss_configure_app(dataset_plan_test)
+endif()
+
+# `--accept-license` through the real binary (Main.cpp), not a stand-in for it.
+if(SS_BUILD_SAM)
+    add_executable(accept_license_cli_test ${SS_SRC}/app/tests/accept_license_cli_test.cpp)
+    add_dependencies(accept_license_cli_test spirula)
+    target_compile_definitions(accept_license_cli_test PRIVATE
+        SS_SPIRULA_EXE="$<TARGET_FILE:spirula>")
+    set_property(TARGET accept_license_cli_test PROPERTY CXX_STANDARD 17)
+    target_compile_options(accept_license_cli_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
 endif()

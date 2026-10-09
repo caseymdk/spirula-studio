@@ -15,7 +15,7 @@ namespace gui {
 
 namespace {
 
-const char* const kStepNames[kNumSteps] = {"frames", "masks", "model", "geometry"};
+const char* const kStepNames[kNumSteps] = {"frames", "masks", "model", "dense", "geometry"};
 
 std::mutex& record_mutex() {
     static std::mutex mu;
@@ -106,6 +106,7 @@ Step settings_step(const std::string& key) {
     if (starts("mask_") || key == "use_found_masks" || key == "flip_found_masks")
         return Step::Masks;
     if (starts("geometry_")) return Step::Geometry;
+    if (starts("dense_")) return Step::Dense;
     if (starts("sfm_") || starts("colmap_") || starts("image_") || key == "engine_colmap" ||
         key == "point_color_in_image_space")
         return Step::Model;
@@ -128,6 +129,15 @@ StepRecord decode_step(const JsonValue& v) {
                     {e.arr[0].as_string(), e.arr[1].as_string(), e.arr[2].as_string()});
     if (const JsonValue* m = v.find("made"); m && m->is_array())
         for (const JsonValue& e : m->arr) r.made.push_back(e.as_string());
+    if (const JsonValue* cs = v.find("captures"); cs && cs->is_array())
+        for (const JsonValue& c : cs->arr) {
+            PrepCapture pc;
+            pc.subdir = text(c, "subdir");
+            pc.path = text(c, "path");
+            pc.fps = c.get_double("fps", 0.0);
+            pc.lockstep = c.find("lockstep") && c.find("lockstep")->as_bool();
+            if (!pc.path.empty()) r.captures.push_back(std::move(pc));
+        }
     return r;
 }
 
@@ -149,6 +159,18 @@ JsonValue encode_step(const StepRecord& r) {
         JsonValue made = array();
         for (const std::string& m : r.made) made.arr.push_back(str(m));
         set(v, "made", std::move(made));
+    }
+    if (!r.captures.empty()) {
+        JsonValue captures = array();
+        for (const PrepCapture& pc : r.captures) {
+            JsonValue c = object();
+            set(c, "subdir", str(pc.subdir));
+            set(c, "path", str(pc.path));
+            set(c, "fps", num(pc.fps));
+            set(c, "lockstep", boolean(pc.lockstep));
+            captures.arr.push_back(std::move(c));
+        }
+        set(v, "captures", std::move(captures));
     }
     return v;
 }

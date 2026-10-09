@@ -115,6 +115,7 @@ add_library(ss_nn STATIC
     ${SS_SRC}/external/stb_image_impl.cpp
     ${SS_SRC}/external/stb_image_write_impl.cpp
     ${SS_SRC}/core/ExrImage.cpp
+    ${SS_SRC}/core/IccProfile.cpp
     ${SS_SRC}/core/ImageFile.cpp
     ${SS_SRC}/core/MappedFile.cpp
     ${SS_SRC}/core/TiffImage.cpp
@@ -242,6 +243,18 @@ target_compile_options(ss_moge PRIVATE
 set_property(TARGET ss_moge PROPERTY CXX_STANDARD 17)
 
 # ---------------------------------------------------------------------------
+# ss_roma -- native RoMa v2 inference
+# ---------------------------------------------------------------------------
+ss_nn_shaders(roma ${SS_SRC}/roma/shaders SS_ROMA_EMBED)
+file(GLOB_RECURSE SS_ROMA_SOURCES CONFIGURE_DEPENDS ${SS_SRC}/roma/*.cpp)
+list(FILTER SS_ROMA_SOURCES EXCLUDE REGEX "/tests/")
+add_library(ss_roma STATIC ${SS_ROMA_SOURCES} ${SS_ROMA_EMBED})
+target_link_libraries(ss_roma PUBLIC ss_nn)
+target_compile_options(ss_roma PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
+set_property(TARGET ss_roma PROPERTY CXX_STANDARD 17)
+
+# ---------------------------------------------------------------------------
 # ss_video -- container demux + VK_KHR_video_decode_*
 #
 # Gated on SS_ENABLE_PATENTED: H.264 / H.265 / AV1 bitstream parsing is the
@@ -265,7 +278,14 @@ if(SS_ENABLE_PATENTED)
     foreach(test_src ${SS_VIDEO_TESTS})
         get_filename_component(test_name ${test_src} NAME_WE)
         add_executable(${test_name} ${test_src})
-        target_link_libraries(${test_name} PRIVATE ss_video)
+        if(test_name STREQUAL "hevc_sps_crop_test")
+            target_include_directories(${test_name} PRIVATE ${SS_SRC})
+            enable_testing()
+            add_test(NAME ${test_name} COMMAND ${test_name})
+            set_tests_properties(${test_name} PROPERTIES LABELS "cpu;headless")
+        else()
+            target_link_libraries(${test_name} PRIVATE ss_video)
+        endif()
         set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 17)
         target_compile_options(${test_name} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
@@ -280,15 +300,30 @@ file(GLOB SS_NN_TESTS CONFIGURE_DEPENDS
      ${SS_SRC}/aliked/tests/*.cpp ${SS_SRC}/loma/tests/*.cpp
      ${SS_SRC}/metric3d/tests/*.cpp
      ${SS_SRC}/moge/tests/*.cpp ${SS_SRC}/birefnet/tests/*.cpp
-     ${SS_SRC}/gdino/tests/*.cpp)
+     ${SS_SRC}/gdino/tests/*.cpp ${SS_SRC}/roma/tests/*.cpp)
 foreach(test_src ${SS_NN_TESTS})
     get_filename_component(test_name ${test_src} NAME_WE)
     add_executable(${test_name} ${test_src})
     # Every test links every library above it: the four are small, and one
     # rule here beats a per-directory list that drifts.
     target_link_libraries(${test_name} PRIVATE ss_sam ss_aliked ss_loma ss_metric3d
-                                                ss_moge)
+                                                ss_moge ss_roma)
     set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 17)
+    target_compile_definitions(${test_name} PRIVATE SS_REPO_ROOT="${SS_ROOT}")
     target_compile_options(${test_name} PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
 endforeach()
+
+# The licence tests reach outside the inference layer: the app's path logic and
+# terminal prompt, the licence table, and the translation catalogs.
+foreach(t license_paths_test license_text_test fetch_consent_test)
+    if(TARGET ${t})
+        target_link_libraries(${t} PRIVATE ss_license ss_i18n)
+    endif()
+endforeach()
+if(TARGET license_paths_test)
+    target_sources(license_paths_test PRIVATE ${SS_SRC}/app/AppPaths.cpp)
+endif()
+if(TARGET fetch_consent_test)
+    target_sources(fetch_consent_test PRIVATE ${SS_SRC}/app/cli/LicenseCli.cpp)
+endif()

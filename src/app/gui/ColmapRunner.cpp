@@ -265,6 +265,11 @@ void ColmapRunner::take_geometry(ColmapJob& job) {
     job.geometry = _live.geometry;
 }
 
+void ColmapRunner::take_dense(ColmapJob& job) {
+    std::lock_guard<std::mutex> lk(_mu);
+    job.dense = _live.dense;
+}
+
 void ColmapRunner::take_masking(PrepJob& prep) {
     std::lock_guard<std::mutex> lk(_mu);
     prep.mask_enable = _live.mask_enable;
@@ -282,6 +287,7 @@ void ColmapRunner::take_masking(PrepJob& prep) {
     prep.mask_clicks = _live.mask_clicks;
     prep.image_gamut = _live.image_gamut;
     prep.image_is_linear = _live.image_is_linear;
+    prep.image_exposure = _live.image_exposure;
     prep.mask_model_path = _live.mask_model_path;
     prep.mask_detector_path = _live.mask_detector_path;
     prep.mask_detector_threshold = _live.mask_detector_threshold;
@@ -441,6 +447,7 @@ PrepJob ColmapRunner::prep_job(const ColmapJob& job) {
     pj.force_external_decode = job.force_external_decode;
     pj.image_gamut = job.image_gamut;
     pj.image_is_linear = job.image_is_linear;
+    pj.image_exposure = job.image_exposure;
     pj.mask_enable = job.mask_enable;
     pj.mask_prompt = job.mask_prompt;
     pj.mask_negative_prompt = job.mask_negative_prompt;
@@ -957,6 +964,22 @@ void ColmapRunner::run(ColmapJob job) {
         write_unregistered_list(ws, images);
 
         if (!reuse_model) record.finish(Step::Model);
+
+        take_dense(job);
+        plan = plan_dataset(plan_job(job, pj), prior, rec, req, &plan, Step::Dense);
+        verify_dense_reuse(plan,ws.string(),_cancel);
+        say(Step::Dense);
+        if (makes(plan[Step::Dense].act)) {
+            record.begin(Step::Dense, dense_fields(job.dense), {"roma.ply"});
+            std::string error;
+            auto dense = job.dense;
+            if (dense.config.mask_dir == "masks" && !prep.mask_dir_cfg.empty()) {
+                dense.config.mask_dir = prep.mask_dir_cfg;
+                dense.config.invert_masks = dense.config.invert_masks != prep.mask_dir_flipped;
+            }
+            if (!run_dense_step(dense, ws.string(), images, _prog, _cancel, error)) return fail(error);
+            record.finish(Step::Dense);
+        }
 
         // ---- depth and normals ---------------------------------------------
         take_geometry(job);

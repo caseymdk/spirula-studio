@@ -542,6 +542,12 @@ static bool collectModelDirs(const std::string& input, std::vector<fs::path>& ou
     return true;
 }
 
+static bool pairsContain(const std::vector<Mapper::SeamPair>& v, const Mapper::SeamPair& p) {
+    for (const Mapper::SeamPair& q : v)
+        if (q.pair == p.pair) return true;
+    return false;
+}
+
 static bool readModels(const std::string& dir, std::vector<Reconstruction>& models, bool verbose) {
     std::vector<fs::path> dirs;
     if (!collectModelDirs(dir, dirs)) return false;
@@ -603,7 +609,7 @@ static int cmdExtract(int argc, char** argv) {
 
     // ---- directory (batch) ----
     if (fs::is_directory(image)) {
-        adoptExrColorSpace(cfg, image, seen);
+        adoptFileColorSpace(cfg, image, seen);
         fs::path outdir = output.empty() ? fs::path("features") : fs::path(output);
         ExtractStats st;
         int rc = extractDirectory(image, outdir, cfg, st);
@@ -632,7 +638,8 @@ static int cmdExtract(int argc, char** argv) {
                     {image, cfg.mask_dir});
     }
     GrayImage img = loadGrayImage(image, cfg.max_image_size, /*want_color=*/true, maskpath,
-                                  cfg.image_gamut, cfg.image_is_linear, cfg.flip_mask);
+                                  cfg.image_gamut, cfg.image_is_linear, cfg.flip_mask,
+                                  false, "", cfg.exposure);
     if (cfg.sift.verbose)
         L::err(Tag::Extract, M::extract_to_gray,
                {image, img.width, img.height});
@@ -805,6 +812,7 @@ static int cmdMap(int argc, char** argv) {
 
     MapperOptions& opt = cfg.mapper;
     ManagerOptions& mgopt = cfg.manager;
+    opt.seam_order_by_name = cfg.pairs == "sequential";
     const std::string& featdir = cfg.feature_dir;
 
     MatchesDatabase db = readMatches(matchesPath);
@@ -853,6 +861,20 @@ static int cmdMap(int argc, char** argv) {
         compaction.reset();
         if (opt.verbose) reportFeatureCompaction(stats);
     }
+    // As `auto` does: the pair lists and the graph past 256 MB go beside the output, mapped.
+    {
+        size_t n = 0;
+        for (const TwoViewMatches& p : db.pairs) n += p.matches.size();
+        fs::path dir = output.empty() ? fs::path(matchesPath).parent_path() : fs::path(output);
+        if (dir.empty()) dir = ".";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        if (fs::is_directory(dir, ec)) {
+            if (n * sizeof(FeatureMatch) > (256ull << 20))
+                spillMatches(db, (dir / ".spirula-matches.spill").string());
+            opt.spill_dir = dir.string();
+        }
+    }
 
     // The camera setup, in order of authority: what the command line asked for,
     // else what verification recorded in matches.bin (D47), else derived here.
@@ -882,7 +904,7 @@ static int cmdMap(int argc, char** argv) {
         size_t stride = std::max<size_t>(1, db.pairs.size() / want);
         for (size_t p = 0; p < db.pairs.size() && sample.size() < want; p += stride) {
             sample.push_back({db.pairs[p].image1, db.pairs[p].image2});
-            sm.push_back(db.pairs[p].matches);
+            sm.push_back(db.pairs[p].matches.toVector());
         }
         bootstrapGroupFocals(feats, cs.ids, sample, sm, cs.cameras, cs.focal_given,
                              cs.focal_measured, TwoViewOptions{}, 200, 0, opt.verbose);
@@ -973,6 +995,18 @@ static int cmdMap(int argc, char** argv) {
                 if (ss.dropped_images) printf(" (%zu images dropped)", ss.dropped_images);
             }
             printf("\n");
+            size_t strong = 0;
+            std::vector<Mapper::SeamPair> cand;
+            const std::vector<Mapper::SeamPair> open = mapper.openSeams(models[i], &strong, &cand);
+            printf("    open seams: %zu of %zu strong pairs (%zu explained under %.2f)\n",
+                   open.size(), strong, cand.size(), opt.seam_weld_frac);
+            // SS_SFM_MAP_PROF lists every candidate, so an offline scorer can check each term.
+            for (const Mapper::SeamPair& sp : MapProf::enabled() ? cand : open)
+                printf("    seam %s %s-%s explained %zu/%zu, shared neighbours %d, offset %.4f, "
+                       "gap %d, kink ratio %.2f\n",
+                       pairsContain(open, sp) ? "open" : "candidate",
+                       db.images[sp.a].name.c_str(), db.images[sp.b].name.c_str(), sp.explained,
+                       sp.matches, sp.nbr_common, sp.off_depth, sp.gap, sp.kink_ratio);
             DuplicateReport dr =
                 findDuplicateStructure(models[i], mgopt.duplicate, mapper.matchedPredicate());
             printf("    duplicate structure: %zu of %zu co-located pairs share no points "
@@ -1047,6 +1081,10 @@ static int cmdMap(int argc, char** argv) {
     recolorPoints(models, cfg);
     splitCamerasBySize(models, feats);
     if (!output.empty()) writeModels(models, output, opt.verbose, map_gauge, &rigs);
+    if (!output.empty() && !ast.pre_weld.empty()) {
+        resolveImageNames(ast.pre_weld, cfg.image_dir);
+        writeModels(ast.pre_weld, fs::path(output) / "pre_weld", opt.verbose, {}, &rigs);
+    }
     return map_metric ? 0 : 4;
 }
 

@@ -35,6 +35,16 @@ runs.
   value)` fields, plus an id for the output and the ids of the outputs it was
   made from. A step writes its section when it starts (`complete: false`) and
   marks it complete when it finishes.
+- **The videos the frames were cut from** (the frames step's `captures`: path,
+  folder, what a stem counts), written when that step finishes. They are not
+  fields -- they follow from the fields and decide no reuse -- but they are
+  what gives frames brought back their video's IMU and GPS: a run that keeps
+  the frames reports these rather than what its own decoder would have
+  numbered (an ffmpeg extraction counts candidates, not source frames), and a
+  photo input that is some dataset's `images/` takes that dataset's
+  (`captures_behind`). A record without them, or a workspace with only the
+  legacy stamp, has them derived from its frames fields
+  (`recorded_captures`).
 
 The fields are a step's *inputs*, normalized so that the same output gives the
 same fields however the panel was arranged:
@@ -98,6 +108,36 @@ Mask files are also written only when their bytes change, so a pass that
 produces the same mask -- the border stencil applied again -- leaves its
 modification time alone, and with it every feature file `spirula sfm` would
 otherwise consider stale.
+
+### The reconstruction's stages
+
+With the built-in engine, a reconstruction that is made again is not made
+from nothing. `spirula sfm` keeps `features/` and `matches.bin` while the
+settings that made them still read the same -- its own signatures in
+`.resume/`, compared before it trusts either -- re-extracts an image whose
+mask file is newer than its features, and always maps again; `spirula lidar`
+keeps an alignment made from the same scans. The list shows this as one line
+per stage under the reconstruction (`DatasetPlan::parts`). The plan cannot
+compute those signatures without running the tool's own setup, so it
+predicts them: each model field is filed under the first stage whose
+signature carries the flag it becomes (`field_part()`), and the signature
+files' presence says whether there is anything to reuse at all. "Reconstruct
+again" on unchanged settings therefore reads as extraction and matching
+reused, mapping redone -- minutes, where the line above it says the hour.
+
+Each stage's line carries a checkbox: ticked, it runs. Unticking one the plan
+would redo keeps what is on disk (`PartChoice::Keep`, `spirula sfm
+--reuse-features|--reuse-matches keep`, or no `spirula lidar` at all), and
+ticking one it would reuse makes it again (`redo`, `--overwrite`). A kept
+stage is recorded as made with the current settings -- its signature is
+stored again, and a kept feature file older than its mask is dated now -- so
+the next run reuses it without being told. What cannot come out right is
+refused by `StepPlan::lock`, not left to the user: a stage after one that
+runs, mapping on its own, feature points across new frames or another
+frontend (its matcher cannot read them), and matches across a lens change,
+because `matches.bin` carries the camera setup verification used and keeping
+it would leave the new lens unused. `spirula sfm` refuses on its own to keep
+matches over a feature file the same run rewrote.
 
 ## Restoring onto the dataset's own images/
 

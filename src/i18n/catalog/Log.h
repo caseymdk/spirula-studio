@@ -1627,6 +1627,21 @@ SS_MSG(random_init_never,
        "rastgele çekilmesini yasaklıyor. --random-init auto ayarlayın ya da "
        "veri kümesine bir nokta bulutu verin."));
 
+SS_MSG(dense_seed_automatic,
+    EN("Seed points: the dataset's dense cloud {0} (--seed-pointcloud sparse uses the sparse points)"),
+    JA("初期点群：データセットの高密度点群 {0}（疎な点群は --seed-pointcloud sparse）"),
+    ZH_HANS("初始点云：数据集的稠密点云 {0}（--seed-pointcloud sparse 改用稀疏点云）"),
+    ZH_HANT("初始點雲：資料集的稠密點雲 {0}（--seed-pointcloud sparse 改用稀疏點雲）"),
+    KO("초기 점: 데이터셋의 고밀도 점 구름 {0} (희소 점은 --seed-pointcloud sparse)"),
+    DE("Startpunkte: dichte Punktwolke des Datensatzes {0} (--seed-pointcloud sparse nimmt die dünnen Punkte)"),
+    FR("Points initiaux : nuage dense du jeu de données {0} (--seed-pointcloud sparse pour les points épars)"),
+    ES("Puntos iniciales: nube densa del conjunto de datos {0} (--seed-pointcloud sparse usa los dispersos)"),
+    PT("Pontos iniciais: nuvem densa do conjunto de dados {0} (--seed-pointcloud sparse usa os esparsos)"),
+    IT("Punti iniziali: nuvola densa del set di dati {0} (--seed-pointcloud sparse usa quelli sparsi)"),
+    NL("Startpunten: dichte puntenwolk van de dataset {0} (--seed-pointcloud sparse gebruikt de ijle punten)"),
+    RU("Начальные точки: плотное облако набора данных {0} (--seed-pointcloud sparse — разреженные точки)"),
+    TR("Başlangıç noktaları: veri kümesinin yoğun bulutu {0} (seyrek noktalar için --seed-pointcloud sparse)"));
+
 SS_MSG(random_init_replaced,
     EN("Seed points from the dataset: {0}, replaced by random ones "
        "(--random-init always)"),
@@ -1695,71 +1710,100 @@ SS_MSG(ppisp_exif_exposure,
     RU("Экспозиция PPISP инициализирована из EXIF ({0} из {1} фото)"),
     TR("PPISP pozlaması EXIF'ten başlatıldı ({1} fotoğraftan {0})"));
 
-// Printed when the input images are EXRs and no colour space was given on the
-// command line; {0} is the gamut read out of the file.
-SS_MSG(exr_color_space,
-    EN("EXR input read as linear {0} (--image-color-gamut, --image-color-is-linear)"),
-    JA("EXR 入力を線形 {0} として読み込みます"
+// Printed when the images declare their colour space -- an EXR's header, a
+// TIFF's ICC profile -- and none was given on the command line. {0} is the
+// format ("EXR", "TIFF"), {1} the gamut read out of the file.
+SS_MSG(file_color_linear,
+    EN("{0} input read as linear {1} (--image-color-gamut, --image-color-is-linear)"),
+    JA("{0} 入力を線形 {1} として読み込みます"
        "（--image-color-gamut, --image-color-is-linear）"),
-    ZH_HANS("EXR 输入按线性 {0} 读取（--image-color-gamut、--image-color-is-linear）"),
-    ZH_HANT("EXR 輸入依線性 {0} 讀取（--image-color-gamut、--image-color-is-linear）"),
-    KO("EXR 입력을 선형 {0}(으)로 읽습니다"
+    ZH_HANS("{0} 输入按线性 {1} 读取（--image-color-gamut、--image-color-is-linear）"),
+    ZH_HANT("{0} 輸入依線性 {1} 讀取（--image-color-gamut、--image-color-is-linear）"),
+    KO("{0} 입력을 선형 {1}(으)로 읽습니다"
        "(--image-color-gamut, --image-color-is-linear)"),
-    DE("EXR-Eingabe wird als lineares {0} gelesen "
+    DE("{0}-Eingabe wird als lineares {1} gelesen "
        "(--image-color-gamut, --image-color-is-linear)"),
-    FR("Entrée EXR lue comme {0} linéaire "
+    FR("Entrée {0} lue comme {1} linéaire "
        "(--image-color-gamut, --image-color-is-linear)"),
-    ES("Entrada EXR leída como {0} lineal "
+    ES("Entrada {0} leída como {1} lineal "
        "(--image-color-gamut, --image-color-is-linear)"),
-    PT("Entrada EXR lida como {0} linear "
+    PT("Entrada {0} lida como {1} linear "
        "(--image-color-gamut, --image-color-is-linear)"),
-    IT("Ingresso EXR letto come {0} lineare "
+    IT("Ingresso {0} letto come {1} lineare "
        "(--image-color-gamut, --image-color-is-linear)"),
-    NL("EXR-invoer gelezen als lineair {0} "
+    NL("{0}-invoer gelezen als lineair {1} "
        "(--image-color-gamut, --image-color-is-linear)"),
-    RU("Вход EXR читается как линейный {0} "
+    RU("Вход {0} читается как линейный {1} "
        "(--image-color-gamut, --image-color-is-linear)"),
-    TR("EXR girdisi doğrusal {0} olarak okunuyor "
+    TR("{0} girdisi doğrusal {1} olarak okunuyor "
+       "(--image-color-gamut, --image-color-is-linear)"));
+
+SS_MSG(file_color_display,
+    EN("{0} input read as display-encoded {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    JA("{0} 入力を表示用エンコードの {1} として読み込みます"
+       "（--image-color-gamut, --image-color-is-linear）"),
+    ZH_HANS("{0} 输入按显示编码的 {1} 读取"
+            "（--image-color-gamut、--image-color-is-linear）"),
+    ZH_HANT("{0} 輸入依顯示編碼的 {1} 讀取"
+            "（--image-color-gamut、--image-color-is-linear）"),
+    KO("{0} 입력을 디스플레이 인코딩된 {1}(으)로 읽습니다"
+       "(--image-color-gamut, --image-color-is-linear)"),
+    DE("{0}-Eingabe wird als anzeigecodiertes {1} gelesen "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    FR("Entrée {0} lue comme {1} encodé pour l'affichage "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    ES("Entrada {0} leída como {1} codificado para pantalla "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    PT("Entrada {0} lida como {1} codificado para exibição "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    IT("Ingresso {0} letto come {1} codificato per lo schermo "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    NL("{0}-invoer gelezen als weergavegecodeerd {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    RU("Вход {0} читается как экранно закодированный {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    TR("{0} girdisi ekran kodlu {1} olarak okunuyor "
        "(--image-color-gamut, --image-color-is-linear)"));
 
 // The same, for a run that declared the transfer itself and left only the
 // primaries to the file.
-SS_MSG(exr_gamut_from_file,
-    EN("EXR colour space {0}, from the file (--image-color-gamut)"),
-    JA("EXR の色空間は {0} です（ファイルの情報、--image-color-gamut）"),
-    ZH_HANS("EXR 色彩空间为 {0}（取自文件，--image-color-gamut）"),
-    ZH_HANT("EXR 色彩空間為 {0}（取自檔案，--image-color-gamut）"),
-    KO("EXR 색 공간은 {0}입니다(파일에서 읽음, --image-color-gamut)"),
-    DE("EXR-Farbraum {0}, aus der Datei (--image-color-gamut)"),
-    FR("Espace colorimétrique EXR {0}, d'après le fichier (--image-color-gamut)"),
-    ES("Espacio de color EXR {0}, según el archivo (--image-color-gamut)"),
-    PT("Espaço de cor EXR {0}, conforme o arquivo (--image-color-gamut)"),
-    IT("Spazio colore EXR {0}, dal file (--image-color-gamut)"),
-    NL("EXR-kleurruimte {0}, uit het bestand (--image-color-gamut)"),
-    RU("Цветовое пространство EXR {0}, из файла (--image-color-gamut)"),
-    TR("EXR renk uzayı {0}, dosyadan (--image-color-gamut)"));
+SS_MSG(file_gamut_from_file,
+    EN("{0} colour space {1}, from the file (--image-color-gamut)"),
+    JA("{0} の色空間は {1} です（ファイルの情報、--image-color-gamut）"),
+    ZH_HANS("{0} 色彩空间为 {1}（取自文件，--image-color-gamut）"),
+    ZH_HANT("{0} 色彩空間為 {1}（取自檔案，--image-color-gamut）"),
+    KO("{0} 색 공간은 {1}입니다(파일에서 읽음, --image-color-gamut)"),
+    DE("{0}-Farbraum {1}, aus der Datei (--image-color-gamut)"),
+    FR("Espace colorimétrique {0} {1}, d'après le fichier (--image-color-gamut)"),
+    ES("Espacio de color {0} {1}, según el archivo (--image-color-gamut)"),
+    PT("Espaço de cor {0} {1}, conforme o arquivo (--image-color-gamut)"),
+    IT("Spazio colore {0} {1}, dal file (--image-color-gamut)"),
+    NL("{0}-kleurruimte {1}, uit het bestand (--image-color-gamut)"),
+    RU("Цветовое пространство {0} {1}, из файла (--image-color-gamut)"),
+    TR("{0} renk uzayı {1}, dosyadan (--image-color-gamut)"));
 
-SS_MSG(exr_gamut_unknown,
-    EN("The EXR's color primaries match no known color space; reading it as Rec.709"),
-    JA("EXR の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
-    ZH_HANS("EXR 的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
-    ZH_HANT("EXR 的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
-    KO("EXR의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
-    DE("Die Primärfarben der EXR passen zu keinem bekannten Farbraum; "
+SS_MSG(file_gamut_unknown,
+    EN("The {0} input's color primaries match no known color space; reading it as Rec.709"),
+    JA("{0} 入力の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
+    ZH_HANS("{0} 输入的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
+    ZH_HANT("{0} 輸入的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
+    KO("{0} 입력의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
+    DE("Die Primärfarben der {0}-Eingabe passen zu keinem bekannten Farbraum; "
        "sie wird als Rec.709 gelesen"),
-    FR("Les primaires de l'EXR ne correspondent à aucun espace connu ; "
+    FR("Les primaires de l'entrée {0} ne correspondent à aucun espace connu ; "
        "lecture en Rec.709"),
-    ES("Los primarios del EXR no coinciden con ningún espacio conocido; "
+    ES("Los primarios de la entrada {0} no coinciden con ningún espacio conocido; "
        "se lee como Rec.709"),
-    PT("Os primários do EXR não correspondem a nenhum espaço conhecido; "
-       "lido como Rec.709"),
-    IT("I primari dell'EXR non corrispondono ad alcuno spazio noto; "
+    PT("Os primários da entrada {0} não correspondem a nenhum espaço conhecido; "
+       "lida como Rec.709"),
+    IT("I primari dell'ingresso {0} non corrispondono ad alcuno spazio noto; "
        "viene letto come Rec.709"),
-    NL("De primaire kleuren van de EXR passen bij geen bekende kleurruimte; "
-       "hij wordt als Rec.709 gelezen"),
-    RU("Основные цвета EXR не совпадают ни с одним известным пространством; "
-       "файл читается как Rec.709"),
-    TR("EXR'nin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
+    NL("De primaire kleuren van de {0}-invoer passen bij geen bekende kleurruimte; "
+       "die wordt als Rec.709 gelezen"),
+    RU("Основные цвета входа {0} не совпадают ни с одним известным пространством; "
+       "вход читается как Rec.709"),
+    TR("{0} girdisinin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
        "Rec.709 olarak okunuyor"));
 
 SS_MSG(output_directory,
@@ -1934,6 +1978,56 @@ SS_MSG(region_applied,
     NL("Interessegebied: programmaknopen {0}; splats erbuiten loten met gewicht {1}"),
     RU("Область интереса: узлов программы {0}; сплаты снаружи участвуют в выборке с весом {1}"),
     TR("İlgi bölgesi: program düğümü {0}; dışarıdaki splatlar {1} ağırlığıyla çekilir"));
+
+SS_MSG(roi_file,
+    EN("Region of interest: {0}"), JA("関心領域: {0}"), ZH_HANS("感兴趣区域：{0}"),
+    ZH_HANT("感興趣區域：{0}"), KO("관심 영역: {0}"), DE("Interessenbereich: {0}"),
+    FR("Région d'intérêt : {0}"), ES("Región de interés: {0}"), PT("Região de interesse: {0}"),
+    IT("Regione di interesse: {0}"), NL("Interessegebied: {0}"), RU("Область интереса: {0}"),
+    TR("İlgi bölgesi: {0}"));
+
+SS_MSG(roi_file_auto,
+    EN("Region of interest: {0}, the first in the dataset's roi folder (--roi-region off "
+       "trains the whole scene)"),
+    JA("関心領域: {0}（データセットの roi フォルダの先頭。--roi-region off でシーン全体を"
+       "学習）"),
+    ZH_HANS("感兴趣区域：{0}，即数据集 roi 文件夹中的第一个（--roi-region off 训练整个"
+            "场景）"),
+    ZH_HANT("感興趣區域：{0}，即資料集 roi 資料夾中的第一個（--roi-region off 訓練整個"
+            "場景）"),
+    KO("관심 영역: {0}, 데이터셋 roi 폴더의 첫 번째 파일 (--roi-region off이면 장면 전체를 "
+       "학습)"),
+    DE("Interessenbereich: {0}, der erste im roi-Ordner des Datensatzes (--roi-region off "
+       "trainiert die ganze Szene)"),
+    FR("Région d'intérêt : {0}, la première du dossier roi du jeu de données (--roi-region "
+       "off entraîne toute la scène)"),
+    ES("Región de interés: {0}, la primera de la carpeta roi del conjunto de datos "
+       "(--roi-region off entrena toda la escena)"),
+    PT("Região de interesse: {0}, a primeira da pasta roi do conjunto de dados "
+       "(--roi-region off treina a cena inteira)"),
+    IT("Regione di interesse: {0}, la prima nella cartella roi del dataset (--roi-region "
+       "off addestra l'intera scena)"),
+    NL("Interessegebied: {0}, het eerste in de roi-map van de dataset (--roi-region off "
+       "traint de hele scène)"),
+    RU("Область интереса: {0}, первая в папке roi набора данных (--roi-region off "
+       "обучает всю сцену)"),
+    TR("İlgi bölgesi: {0}, veri kümesinin roi klasöründeki ilk dosya (--roi-region off "
+       "tüm sahneyi eğitir)"));
+
+SS_MSG(roi_file_missing,
+    EN("Region of interest file not found: {0}"),
+    JA("関心領域ファイルが見つかりません: {0}"),
+    ZH_HANS("找不到感兴趣区域文件：{0}"),
+    ZH_HANT("找不到感興趣區域檔案：{0}"),
+    KO("관심 영역 파일을 찾을 수 없습니다: {0}"),
+    DE("Datei des Interessenbereichs nicht gefunden: {0}"),
+    FR("Fichier de région d'intérêt introuvable : {0}"),
+    ES("No se encuentra el archivo de región de interés: {0}"),
+    PT("Ficheiro da região de interesse não encontrado: {0}"),
+    IT("File della regione di interesse non trovato: {0}"),
+    NL("Bestand met interessegebied niet gevonden: {0}"),
+    RU("Файл области интереса не найден: {0}"),
+    TR("İlgi bölgesi dosyası bulunamadı: {0}"));
 
 SS_MSG(region_masks,
     EN("Region of interest: {0} images masked to what they show of it; {1}% of pixels left out"),
@@ -4101,6 +4195,147 @@ SS_MSG(err_geometry_failed,
        "завершена, и на ней можно обучать как есть."),
     TR("derinlik ve normal kestirimi başarısız oldu (günlüğe bakın). Yeniden "
        "kurmanın kendisi tamamlandı ve olduğu gibi eğitilebilir."));
+
+SS_MSG(progressive_stage,
+    EN("Progressive resolution: 1/{0} of the loaded size from about step {1}"),
+    JA("段階的な解像度: 約ステップ {1} から読み込みサイズの 1/{0}"),
+    ZH_HANS("渐进分辨率：约从第 {1} 步起为加载尺寸的 1/{0}"),
+    ZH_HANT("漸進解析度：約從第 {1} 步起為載入尺寸的 1/{0}"),
+    KO("점진적 해상도: 약 {1}단계부터 불러온 크기의 1/{0}"),
+    DE("Schrittweise Auflösung: 1/{0} der geladenen Größe ab etwa Schritt {1}"),
+    FR("Résolution progressive : 1/{0} de la taille chargée à partir de l'étape {1} environ"),
+    ES("Resolución progresiva: 1/{0} del tamaño cargado desde el paso {1} aproximadamente"),
+    PT("Resolução progressiva: 1/{0} do tamanho carregado a partir do passo {1} aproximadamente"),
+    IT("Risoluzione progressiva: 1/{0} della dimensione caricata dal passo {1} circa"),
+    NL("Oplopende resolutie: 1/{0} van de geladen grootte vanaf ongeveer stap {1}"),
+    RU("Постепенное разрешение: 1/{0} загруженного размера примерно с шага {1}"),
+    TR("Kademeli çözünürlük: yaklaşık {1}. adımdan itibaren yüklenen boyutun 1/{0}'i"));
+SS_MSG(progressive_stage_full,
+    EN("Progressive resolution: the full loaded size from about step {0}"),
+    JA("段階的な解像度: 約ステップ {0} から読み込みサイズのまま"),
+    ZH_HANS("渐进分辨率：约从第 {0} 步起为完整加载尺寸"),
+    ZH_HANT("漸進解析度：約從第 {0} 步起為完整載入尺寸"),
+    KO("점진적 해상도: 약 {0}단계부터 불러온 원래 크기"),
+    DE("Schrittweise Auflösung: volle geladene Größe ab etwa Schritt {0}"),
+    FR("Résolution progressive : pleine taille chargée à partir de l'étape {0} environ"),
+    ES("Resolución progresiva: tamaño cargado completo desde el paso {0} aproximadamente"),
+    PT("Resolução progressiva: tamanho carregado completo a partir do passo {0} aproximadamente"),
+    IT("Risoluzione progressiva: dimensione caricata piena dal passo {0} circa"),
+    NL("Oplopende resolutie: volledige geladen grootte vanaf ongeveer stap {0}"),
+    RU("Постепенное разрешение: полный загруженный размер примерно с шага {0}"),
+    TR("Kademeli çözünürlük: yaklaşık {0}. adımdan itibaren yüklenen tam boyut"));
+SS_MSG(progressive_now,
+    EN("Training resolution is now 1/{0} of the loaded size (step {1})"),
+    JA("学習解像度は読み込みサイズの 1/{0} になりました（ステップ {1}）"),
+    ZH_HANS("训练分辨率现为加载尺寸的 1/{0}（第 {1} 步）"),
+    ZH_HANT("訓練解析度現為載入尺寸的 1/{0}（第 {1} 步）"),
+    KO("학습 해상도가 이제 불러온 크기의 1/{0}입니다({1}단계)"),
+    DE("Die Trainingsauflösung ist jetzt 1/{0} der geladenen Größe (Schritt {1})"),
+    FR("La résolution d'entraînement est maintenant 1/{0} de la taille chargée (étape {1})"),
+    ES("La resolución de entrenamiento es ahora 1/{0} del tamaño cargado (paso {1})"),
+    PT("A resolução de treino agora é 1/{0} do tamanho carregado (passo {1})"),
+    IT("La risoluzione di addestramento è ora 1/{0} della dimensione caricata (passo {1})"),
+    NL("De trainingsresolutie is nu 1/{0} van de geladen grootte (stap {1})"),
+    RU("Разрешение обучения теперь 1/{0} загруженного размера (шаг {1})"),
+    TR("Eğitim çözünürlüğü artık yüklenen boyutun 1/{0}'i ({1}. adım)"));
+SS_MSG(progressive_now_full,
+    EN("Training resolution is now the full loaded size (step {0})"),
+    JA("学習解像度は読み込みサイズのままになりました（ステップ {0}）"),
+    ZH_HANS("训练分辨率现为完整加载尺寸（第 {0} 步）"),
+    ZH_HANT("訓練解析度現為完整載入尺寸（第 {0} 步）"),
+    KO("학습 해상도가 이제 불러온 원래 크기입니다({0}단계)"),
+    DE("Die Trainingsauflösung ist jetzt die volle geladene Größe (Schritt {0})"),
+    FR("La résolution d'entraînement est maintenant la pleine taille chargée (étape {0})"),
+    ES("La resolución de entrenamiento es ahora el tamaño cargado completo (paso {0})"),
+    PT("A resolução de treino agora é o tamanho carregado completo (passo {0})"),
+    IT("La risoluzione di addestramento è ora la dimensione caricata piena (passo {0})"),
+    NL("De trainingsresolutie is nu de volledige geladen grootte (stap {0})"),
+    RU("Разрешение обучения теперь равно полному загруженному размеру (шаг {0})"),
+    TR("Eğitim çözünürlüğü artık yüklenen tam boyut ({0}. adım)"));
+SS_MSG(splat_budget_seed,
+    EN("Splat budget: from {0} starting splats to a maximum of {1}"),
+    JA("スプラット予算: 開始時の {0} 個から最大 {1} 個まで"),
+    ZH_HANS("泼溅预算：从初始 {0} 个到最多 {1} 个"),
+    ZH_HANT("潑濺預算：從初始 {0} 個到最多 {1} 個"),
+    KO("스플랫 예산: 시작 {0}개에서 최대 {1}개까지"),
+    DE("Splat-Budget: von {0} Start-Splats bis zu höchstens {1}"),
+    FR("Budget de splats : de {0} splats de départ jusqu'à {1} au plus"),
+    ES("Presupuesto de splats: de {0} splats iniciales hasta un máximo de {1}"),
+    PT("Orçamento de splats: de {0} splats iniciais até no máximo {1}"),
+    IT("Budget di splat: da {0} splat iniziali fino a un massimo di {1}"),
+    NL("Splatbudget: van {0} start-splats tot hoogstens {1}"),
+    RU("Бюджет сплатов: от {0} начальных сплатов до максимума {1}"),
+    TR("Splat bütçesi: {0} başlangıç splat'inden en çok {1} değerine"));
+SS_MSG(splat_budget_stage,
+    EN("Splat budget: up to {0} splats from about step {1}"),
+    JA("スプラット予算: 約ステップ {1} から最大 {0} 個"),
+    ZH_HANS("泼溅预算：约从第 {1} 步起最多 {0} 个"),
+    ZH_HANT("潑濺預算：約從第 {1} 步起最多 {0} 個"),
+    KO("스플랫 예산: 약 {1}단계부터 최대 {0}개"),
+    DE("Splat-Budget: bis zu {0} Splats ab etwa Schritt {1}"),
+    FR("Budget de splats : jusqu'à {0} splats à partir de l'étape {1} environ"),
+    ES("Presupuesto de splats: hasta {0} splats desde el paso {1} aproximadamente"),
+    PT("Orçamento de splats: até {0} splats a partir do passo {1} aproximadamente"),
+    IT("Budget di splat: fino a {0} splat dal passo {1} circa"),
+    NL("Splatbudget: tot {0} splats vanaf ongeveer stap {1}"),
+    RU("Бюджет сплатов: до {0} сплатов примерно с шага {1}"),
+    TR("Splat bütçesi: yaklaşık {1}. adımdan itibaren en çok {0} splat"));
+SS_MSG(splat_budget_late,
+    EN("The splat budget rises to {0} at step {1}, but splats stop growing at step {2}, so the extra budget goes unused"),
+    JA("スプラット予算はステップ {1} で {0} に上がりますが、スプラットの増加はステップ {2} で止まるため、増えた分は使われません"),
+    ZH_HANS("泼溅预算在第 {1} 步升到 {0}，但泼溅在第 {2} 步就停止增长，多出的预算不会被用到"),
+    ZH_HANT("潑濺預算在第 {1} 步升到 {0}，但潑濺在第 {2} 步就停止增長，多出的預算不會被用到"),
+    KO("스플랫 예산이 {1}단계에서 {0}(으)로 오르지만 스플랫 증가는 {2}단계에서 멈추므로 늘어난 예산은 쓰이지 않습니다"),
+    DE("Das Splat-Budget steigt bei Schritt {1} auf {0}, aber die Splats hören bei Schritt {2} auf zu wachsen; das zusätzliche Budget bleibt ungenutzt"),
+    FR("Le budget de splats passe à {0} à l'étape {1}, mais les splats cessent de croître à l'étape {2} : le budget supplémentaire restera inutilisé"),
+    ES("El presupuesto de splats sube a {0} en el paso {1}, pero los splats dejan de crecer en el paso {2}, así que el presupuesto extra no se usará"),
+    PT("O orçamento de splats sobe para {0} no passo {1}, mas os splats param de crescer no passo {2}, então o orçamento extra não será usado"),
+    IT("Il budget di splat sale a {0} al passo {1}, ma gli splat smettono di crescere al passo {2}, quindi il budget in più resta inutilizzato"),
+    NL("Het splatbudget stijgt bij stap {1} naar {0}, maar de splats groeien vanaf stap {2} niet meer, dus het extra budget blijft ongebruikt"),
+    RU("Бюджет сплатов вырастает до {0} на шаге {1}, но рост сплатов прекращается на шаге {2}, так что добавленный бюджет не будет использован"),
+    TR("Splat bütçesi {1}. adımda {0} değerine çıkıyor, ancak splat'ler {2}. adımda büyümeyi bırakıyor; ek bütçe kullanılmayacak"));
+SS_MSG(perf_log_started,
+    EN("Logging performance stats to {0}"),
+    JA("性能の統計を {0} に記録しています"),
+    ZH_HANS("正在将性能统计记录到 {0}"),
+    ZH_HANT("正在將效能統計記錄到 {0}"),
+    KO("성능 통계를 {0}에 기록하는 중"),
+    DE("Leistungsdaten werden in {0} protokolliert"),
+    FR("Statistiques de performance enregistrées dans {0}"),
+    ES("Registrando estadísticas de rendimiento en {0}"),
+    PT("Registrando estatísticas de desempenho em {0}"),
+    IT("Registrazione delle statistiche delle prestazioni in {0}"),
+    NL("Prestatiestatistieken worden vastgelegd in {0}"),
+    RU("Статистика производительности записывается в {0}"),
+    TR("Performans istatistikleri {0} konumuna kaydediliyor"));
+SS_MSG(perf_log_failed,
+    EN("Could not write performance stats to {0}; training continues without them"),
+    JA("性能の統計を {0} に書き込めませんでした。統計なしで学習を続けます"),
+    ZH_HANS("无法将性能统计写入 {0}；训练将在不记录的情况下继续"),
+    ZH_HANT("無法將效能統計寫入 {0}；訓練將在不記錄的情況下繼續"),
+    KO("성능 통계를 {0}에 쓸 수 없습니다. 통계 없이 학습을 계속합니다"),
+    DE("Leistungsdaten konnten nicht in {0} geschrieben werden; das Training läuft ohne sie weiter"),
+    FR("Impossible d'écrire les statistiques de performance dans {0} ; l'entraînement continue sans elles"),
+    ES("No se pudieron escribir las estadísticas de rendimiento en {0}; el entrenamiento continúa sin ellas"),
+    PT("Não foi possível gravar as estatísticas de desempenho em {0}; o treinamento continua sem elas"),
+    IT("Impossibile scrivere le statistiche delle prestazioni in {0}; l'addestramento continua senza"),
+    NL("Kon geen prestatiestatistieken schrijven naar {0}; de training gaat zonder door"),
+    RU("Не удалось записать статистику производительности в {0}; обучение продолжится без неё"),
+    TR("Performans istatistikleri {0} konumuna yazılamadı; eğitim onlarsız sürüyor"));
+SS_MSG(perf_log_report,
+    EN("Performance stats saved. For a report, run: python tools/perf/perf_report.py \"{0}\""),
+    JA("性能の統計を保存しました。レポートを作るには次を実行します: python tools/perf/perf_report.py \"{0}\""),
+    ZH_HANS("性能统计已保存。如需报告，请运行：python tools/perf/perf_report.py \"{0}\""),
+    ZH_HANT("效能統計已儲存。如需報告，請執行：python tools/perf/perf_report.py \"{0}\""),
+    KO("성능 통계를 저장했습니다. 보고서를 만들려면 다음을 실행하세요: python tools/perf/perf_report.py \"{0}\""),
+    DE("Leistungsdaten gespeichert. Für einen Bericht ausführen: python tools/perf/perf_report.py \"{0}\""),
+    FR("Statistiques de performance enregistrées. Pour un rapport, exécutez : python tools/perf/perf_report.py \"{0}\""),
+    ES("Estadísticas de rendimiento guardadas. Para un informe, ejecute: python tools/perf/perf_report.py \"{0}\""),
+    PT("Estatísticas de desempenho salvas. Para um relatório, execute: python tools/perf/perf_report.py \"{0}\""),
+    IT("Statistiche delle prestazioni salvate. Per un rapporto, eseguire: python tools/perf/perf_report.py \"{0}\""),
+    NL("Prestatiestatistieken opgeslagen. Voor een rapport, voer uit: python tools/perf/perf_report.py \"{0}\""),
+    RU("Статистика производительности сохранена. Для отчёта выполните: python tools/perf/perf_report.py \"{0}\""),
+    TR("Performans istatistikleri kaydedildi. Rapor için şunu çalıştırın: python tools/perf/perf_report.py \"{0}\""));
 
 }  // namespace log
 }  // namespace msg

@@ -113,11 +113,12 @@ void applyExifOrientation(GrayImage& img) {
         spirula::orient_pixels(img.data.data(), img.width, img.height, 1,
                                xf.turns_cw, false, gray.data());
         img.data.swap(gray);
-        if (img.hasColor()) {
-            std::vector<uint8_t> rgb(img.rgb.size());
-            spirula::orient_pixels(img.rgb.data(), img.width, img.height, 3,
-                                   xf.turns_cw, false, rgb.data());
-            img.rgb.swap(rgb);
+        for (std::vector<uint8_t>* px : {&img.rgb, &img.color}) {
+            if (px->empty()) continue;
+            std::vector<uint8_t> turned(px->size());
+            spirula::orient_pixels(px->data(), img.width, img.height, 3,
+                                   xf.turns_cw, false, turned.data());
+            px->swap(turned);
         }
         if (!img.mask.empty()) {
             std::vector<uint8_t> bits(img.mask.bits.size());
@@ -135,38 +136,88 @@ void applyExifOrientation(GrayImage& img) {
     img.exif.orientation = 1;
 }
 
+// A cut-out's alpha as a mask gated at 128, read apart from the colour so the
+// exposure path stays as it is. Empty when the file has no alpha, or nothing
+// in it is transparent -- most RGBA files.
+Mask loadAlpha(const std::string& path) {
+    int w = 0, h = 0, chan = 0;
+    std::vector<uint8_t> own;
+    stbi_uc* stb = nullptr;
+    const uint8_t* px = nullptr;
+    if (imagefile::handles(path)) {
+        imagefile::Info info;
+        if (!imagefile::probe(path, info).empty() || (info.channels != 2 && info.channels != 4))
+            return Mask();
+        imagefile::Options opt;
+        opt.channels = 4;
+        opt.threads = 1;
+        if (!imagefile::decode_srgb8(path, opt, info, own).empty()) return Mask();
+        w = info.width;
+        h = info.height;
+        px = own.data();
+    } else {
+        if (!stbi_info(path.c_str(), &w, &h, &chan) || (chan != 2 && chan != 4)) return Mask();
+        stb = stbi_load(path.c_str(), &w, &h, &chan, 4);
+        if (!stb) return Mask();
+        px = stb;
+    }
+    Mask m;
+    m.width = w;
+    m.height = h;
+    m.bits.resize((size_t)w * h);
+    bool any = false;
+    for (size_t i = 0; i < m.bits.size(); i++) {
+        m.bits[i] = px[4 * i + 3] >= 128 ? 1 : 0;
+        any = any || !m.bits[i];
+    }
+    if (stb) stbi_image_free(stb);
+    if (!any) m.bits.clear();
+    return m;
+}
+
 }  // namespace
 
 GrayImage loadGrayImage(const std::string& path, int max_image_size, bool want_color,
                         const std::string& mask_path,
                         const std::string& gamut, std::optional<bool> is_linear,
                         bool flip_mask, bool apply_exif_orientation,
-                        const std::string& feature_mask_path) {
+                        const std::string& feature_mask_path,
+                        const colorspace::Exposure& exposure) {
     int w = 0, h = 0, chan = 0;
     // Force 3 channels; we do our own luma so behavior is decoder-independent.
     // An EXR or TIFF decodes on this thread: the pool above already owns every core.
-    std::vector<uint8_t> own_rgb;
+    std::vector<uint8_t> own_rgb, plain;
     unsigned char* rgb = nullptr;
+    GrayImage img;
     if (imagefile::handles(path)) {
         imagefile::Info info;
         imagefile::Options opt;
         opt.threads = 1;
-        const std::string err =
-            imagefile::decode_srgb8(path, opt, info, own_rgb, gamut, is_linear);
+        opt.exposure = exposure;
+        const std::string err = imagefile::decode_srgb8(path, opt, info, own_rgb, gamut,
+                                                        is_linear, want_color ? &plain : nullptr);
         if (!err.empty())
             throw std::runtime_error("cannot decode image " + path + ": " + err);
         w = info.width;
         h = info.height;
         rgb = own_rgb.data();
+        img.gain = info.gain;
+        img.peak = info.peak;
     } else {
         rgb = stbi_load(path.c_str(), &w, &h, &chan, 3);
         if (!rgb)
             throw std::runtime_error("cannot decode image " + path + ": " + stbi_failure_reason());
+        const size_t n = (size_t)w * h * 3;
+        if (is_linear.value_or(false)) img.peak = *std::max_element(rgb, rgb + n) / 255.0f;
         colorspace::to_srgb_inplace(rgb, (size_t)w * h, gamut,
                                     is_linear.value_or(false));
+        img.gain = colorspace::exposure_gain_srgb8(exposure, rgb, (size_t)w, (size_t)h);
+        if (img.gain != 1.0f) {
+            if (want_color) plain.assign(rgb, rgb + n);
+            colorspace::expose_srgb8_inplace(rgb, n, img.gain);
+        }
     }
 
-    GrayImage img;
     img.orig_width = w;
     img.orig_height = h;
 
@@ -185,6 +236,9 @@ GrayImage loadGrayImage(const std::string& path, int max_image_size, bool want_c
     if (want_color) {
         img.rgb = (dw == w && dh == h) ? std::vector<uint8_t>(rgb, rgb + (size_t)w * h * 3)
                                        : downscaleRgb(rgb, w, h, dw, dh);
+        if (!plain.empty())
+            img.color = (dw == w && dh == h) ? std::move(plain)
+                                             : downscaleRgb(plain.data(), w, h, dw, dh);
     }
     if (dw == w && dh == h) {
         img.data.resize((size_t)w * h);
@@ -204,6 +258,8 @@ GrayImage loadGrayImage(const std::string& path, int max_image_size, bool want_c
     // finding img.mask empty.
     if (!feature_mask_path.empty() && (mask_path.empty() || !img.mask.empty()))
         intersectMask(img.mask, loadMask(feature_mask_path));
+    // ANDed with the files, unflipped, as the trainer reads it (data/DataManager.h).
+    if (mask_path.empty() || !img.mask.empty()) intersectMask(img.mask, loadAlpha(path));
     img.exif = readExif(path);  // header bytes only; see sfm/core/Exif.h
     if (apply_exif_orientation) applyExifOrientation(img);
     return img;

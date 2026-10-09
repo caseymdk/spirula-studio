@@ -177,22 +177,43 @@ VkInstance createInstance(bool validation, VkDebugUtilsMessengerEXT* messenger) 
 
     std::vector<const char*> layers;
     std::vector<const char*> exts;
+    bool layer_settings = false;
     if (validation) {
+        const char* kLayer = "VK_LAYER_KHRONOS_validation";
         uint32_t n = 0;
         vkEnumerateInstanceLayerProperties(&n, nullptr);
         std::vector<VkLayerProperties> props(n);
         vkEnumerateInstanceLayerProperties(&n, props.data());
         for (auto& p : props)
-            if (std::strcmp(p.layerName, "VK_LAYER_KHRONOS_validation") == 0)
-                layers.push_back("VK_LAYER_KHRONOS_validation");
-        if (layers.empty())
+            if (std::strcmp(p.layerName, kLayer) == 0) layers.push_back(kLayer);
+        if (layers.empty()) {
             NN_LOG_WARN("[vk] validation requested but the layer is not installed\n");
-        else
+        } else {
             exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            n = 0;
+            vkEnumerateInstanceExtensionProperties(kLayer, &n, nullptr);
+            std::vector<VkExtensionProperties> lext(n);
+            vkEnumerateInstanceExtensionProperties(kLayer, &n, lext.data());
+            for (auto& e : lext)
+                if (std::strcmp(e.extensionName, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME) == 0)
+                    layer_settings = true;
+            if (layer_settings) exts.push_back(VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
+        }
     }
 
     VkInstanceCreateInfo ici{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ici.pApplicationInfo = &app;
+
+    // NVIDIA 595 follows vkCmdDecodeVideoKHR's codec pNext again inside
+    // vkQueueSubmit. Handle wrapping hands the driver a copy freed when the
+    // record call returns, so a validated decode segfaults at its first submit.
+    const VkBool32 no_wrap = VK_FALSE;
+    VkLayerSettingEXT wrap_setting{"VK_LAYER_KHRONOS_validation", "unique_handles",
+                                   VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &no_wrap};
+    VkLayerSettingsCreateInfoEXT lsci{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT};
+    lsci.settingCount = 1;
+    lsci.pSettings = &wrap_setting;
+    if (layer_settings) ici.pNext = &lsci;
 
     // A driver implementing only a subset of Vulkan (MoltenVK, the sole driver
     // on macOS) stays hidden from vkEnumeratePhysicalDevices unless the
@@ -528,6 +549,10 @@ void Context::pickPhysicalDevice(const ContextOptions& opts) {
     vkGetPhysicalDeviceMemoryProperties(physical_, &mem_props_);
 }
 
+spirula::vkmemory::Budget Context::memoryBudget() const {
+    return memory_budget_ ? spirula::vkmemory::queryBudget(physical_) : spirula::vkmemory::Budget{};
+}
+
 void Context::createDevice(const ContextOptions& opts) {
     uint32_t nq = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_, &nq, nullptr);
@@ -569,6 +594,8 @@ void Context::createDevice(const ContextOptions& opts) {
     };
 
     std::vector<const char*> exts;
+    memory_budget_ = has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+    if (memory_budget_) exts.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     // Mandatory where advertised: the spec forbids creating a device from a
     // portability physical device without it. Spelled out rather than using
     // the macro, which is behind VK_ENABLE_BETA_EXTENSIONS.
@@ -583,7 +610,8 @@ void Context::createDevice(const ContextOptions& opts) {
         p2.pNext = &sp;
         vkGetPhysicalDeviceProperties2(physical_, &p2);
         // Pin the widest size the device offers that our 64-wide-X kernels can
-        // still fill; Intel/ANV's varying width is the failure this avoids.
+        // still fill; Intel/ANV's varying width is the failure this avoids. On
+        // RDNA2, 64 against 32: SAM 2 + GDINO 6% faster, MoGe 1.3% slower.
         preferred_subgroup_ = std::min<uint32_t>(sp.maxSubgroupSize, 64u);
         preferred_subgroup_ = std::max<uint32_t>(preferred_subgroup_, sp.minSubgroupSize);
         NN_LOG_DEBUG("[vk] subgroup size pinned to %u (range %u..%u)\n",

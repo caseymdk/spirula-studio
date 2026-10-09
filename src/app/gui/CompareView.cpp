@@ -456,6 +456,7 @@ void CompareView::begin_edit(int index) {
         _render.note_saved(saved, placement);
         const int n = render::copy_moved_projects(source, saved, placement, dir);
         if (n > 0) _log.push_back(spirula::i18n::format(rmsg::projects_moved, {(long long)n, dir}));
+        if (_on_model_saved) _on_model_saved(saved);
     });
 
     switch (m.src.kind()) {
@@ -676,8 +677,13 @@ void CompareView::feed_render() {
                 double a[12];
                 for (int k = 0; k < 12; k++) a[k] = A[k];
                 file_to_norm = spirula::Sim3::from_3x4(a);
-                si.has_up = true;
-                for (int k = 0; k < 3; k++) si.up[k] = v.ds->normalized_rotation[6 + k];
+                // Up as the pane shows it: the parsers' guess while it levels
+                // the cameras, else the file's own +Z, which a measured or
+                // hand-placed frame is known to have.
+                const bool level = m.panel.level_cameras();
+                si.has_up = level || v.ds->gauge_oriented || v.ds->edited_in_place;
+                for (int k = 0; k < 3; k++)
+                    si.up[k] = level ? v.ds->normalized_rotation[6 + k] : (k == 2 ? 1.0 : 0.0);
                 break;
             }
             case SplatViewer::Kind::Mesh:
@@ -836,22 +842,31 @@ void CompareView::draw_toolbar() {
         EditDoc* d = _edit.doc();
         const int linked = d ? d->linked_count() : 0;
         if (linked > 0) ui::TextDisabledWrapped(emsg::mesh_link_edits_help);
+        // Waited for, so the pane reads back what was written; a save that
+        // failed keeps the editor open with its error.
+        auto save = [this, d, &finish] {
+            _edit.save_in_place();
+            _edit.wait_for_save();
+            if (d && d->dirty()) {
+                _discard_then = nullptr;
+                ImGui::CloseCurrentPopup();
+            } else {
+                finish();
+            }
+        };
         ImGui::BeginDisabled(!_edit.can_save_in_place());
         if (linked > 0) {
             if (ui::Button(emsg::save_this_only)) {
                 d->set_linked(false);
-                _edit.save_in_place();
-                finish();
+                save();
             }
             ImGui::SameLine();
             if (ui::Button(emsg::save_all_files, {(long long)(linked + 1)})) {
                 d->set_linked(true);
-                _edit.save_in_place();
-                finish();
+                save();
             }
         } else if (ui::Button(emsg::save_over)) {
-            _edit.save_in_place();
-            finish();
+            save();
         }
         ImGui::EndDisabled();
         if (linked == 0) ImGui::SameLine();

@@ -237,6 +237,37 @@ int cmdMaskSelftest(int, char**) {
                    broken.mask.empty() ? "empty" : "not empty");
             fails++;
         }
+
+        // An image's own alpha: opaque on the left half, ANDed with a mask
+        // file the flip does not reach; an opaque one adds no mask at all.
+        auto writeTga = [](const fs::path& p, int w, int h, bool cut) {
+            std::string b(18, '\0');
+            b[2] = 2;
+            b[12] = (char)(w & 255); b[13] = (char)(w >> 8);
+            b[14] = (char)(h & 255); b[15] = (char)(h >> 8);
+            b[16] = 32;
+            b[17] = 0x28;   // top-left origin, 8 alpha bits
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++) {
+                    b += (char)90; b += (char)(y * 4); b += (char)(x * 3);
+                    b += (char)(!cut || x < w / 2 ? 255 : 0);
+                }
+            std::ofstream(p, std::ios::binary) << b;
+        };
+        writeTga(d / "cut.tga", 64, 48, true);
+        writeTga(d / "opaque.tga", 64, 48, false);
+        GrayImage cut = loadGrayImage((d / "cut.tga").string(), 0, true);
+        GrayImage cut_b = loadGrayImage((d / "cut.tga").string(), 0, false,
+                                        (d / "b.pgm").string(), "", std::nullopt, true);
+        GrayImage opaque = loadGrayImage((d / "opaque.tga").string(), 0, true);
+        if (std::fabs(cut.mask.keepFraction() - 0.5) > 1e-6 || !cut.mask.atUV(0.1f, 0.5f) ||
+            std::fabs(cut_b.mask.keepFraction() - 0.25) > 1e-6 || !opaque.mask.empty() ||
+            !cut.hasColor() || cut.rgb[0] != 0 || cut.rgb[2] != 90) {
+            printf("  FAIL: alpha as a mask kept %.3f / %.3f, opaque %s\n",
+                   cut.mask.keepFraction(), cut_b.mask.keepFraction(),
+                   opaque.mask.empty() ? "unmasked" : "masked");
+            fails++;
+        }
     }
 
     // ---- 3. discovery: the naming conventions in the wild ----

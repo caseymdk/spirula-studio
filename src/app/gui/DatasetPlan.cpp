@@ -1,4 +1,7 @@
 #include "app/gui/DatasetPlan.h"
+#include "dense/ConfigFields.h"
+#include "dense/Artifact.h"
+#include "i18n/catalog/Dense.h"
 
 #include "app/FrameMask.h"
 #include "app/gui/ColmapRunner.h"
@@ -10,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <iterator>
 #include <map>
 #include <set>
 
@@ -237,6 +241,27 @@ bool soft_model_key(const std::string& key) {
     return key == "masks_for_features" || key == "feature_only_masks";
 }
 
+// The first `spirula sfm` stage whose signature (sfm::stageSignature) carries
+// what a model field becomes on its command line. Unlisted counts as
+// extraction: overstating the work beats hiding it.
+ModelPart field_part(const std::string& key) {
+    static const char* const matching[] = {
+        "lens",        "focal",        "camera_mode", "data_type", "matcher",
+        "pairs",       "overlap",      "loop_closure", "prefilter_sequential",
+        "focal_px",    "distortion",   "sequence",    "rig",        "scan_views",
+    };
+    static const char* const mapping[] = {
+        "mapper",         "distortion_refine", "final_per_image_intrinsics",
+        "final_free_rig", "metric_gps",        "sensor_gauge",
+        "exif_attitude",
+    };
+    for (const char* k : matching)
+        if (key == k) return ModelPart::Matching;
+    for (const char* k : mapping)
+        if (key == k) return ModelPart::Mapping;
+    return ModelPart::Features;
+}
+
 std::vector<FieldChange> diff(const StepFields& was, const StepFields& now,
                               bool only_now = false) {
     auto key = [](const StepField& f) { return f.key + '\x1f' + f.scope; };
@@ -269,6 +294,114 @@ void compare(StepPlan& s, const StepRecord& r, std::vector<FieldChange> changes)
                          s.changes.empty() ? Why::Resume : Why::Settings);
     else if (s.changes.empty()) set(s, Act::Reuse);
     else set(s, Act::Redo, Why::Settings);
+}
+
+// What `spirula sfm` and `spirula lidar` will make of the workspace: each
+// reuses by its own signature, predicted here from the fields that feed it,
+// then what the user chose where the stage's lock allows.
+void plan_parts(DatasetPlan& p, const PlanJob& job, const WorkspaceState& ws,
+                const DatasetRecord& rec, const PlanRequest& req, bool masks_feed) {
+    const StepPlan& fr = p[Step::Frames];
+    const StepPlan& mk = p[Step::Masks];
+    const StepPlan& md = p[Step::Model];
+    const StepRecord& rr = rec.step(Step::Model);
+    StepPlan& fe = p[ModelPart::Features];
+    StepPlan& ma = p[ModelPart::Matching];
+    StepPlan& mp = p[ModelPart::Mapping];
+    StepPlan& al = p[ModelPart::Align];
+    if (!job.reconstruct) return;
+
+    auto choose = [&](ModelPart part, StepPlan& s) {
+        if (s.lock != Lock::None) return;
+        const PartChoice c = req.parts[(int)part];
+        if (c == PartChoice::Keep && makes(s.act)) s.act = Act::Keep;
+        else if (c == PartChoice::Run && !makes(s.act)) set(s, Act::Redo, Why::Requested);
+    };
+    auto changed = [](const StepPlan& s, std::initializer_list<const char*> keys) {
+        for (const FieldChange& c : s.changes)
+            for (const char* k : keys)
+                if (c.key == k) return true;
+        return false;
+    };
+
+    if (job.staged && makes(md.act)) {
+        if (rr.present)
+            for (const FieldChange& c : diff(rr.fields, job.model))
+                p[field_part(c.key)].changes.push_back(c);
+
+        const std::string dir = image_dir_field(job.prep);
+        const fs::path images = dir == "images" ? fs::path(job.prep.workspace) / dir : fs::path(dir);
+        const bool moved = !ws.extracted_images.empty() && !same_dir(ws.extracted_images, images);
+
+        // The runner deletes features/ and matches.bin under new frames.
+        if (makes(fr.act)) {
+            set(fe, ws.features ? Act::Redo : Act::Run, ws.features ? Why::Frames : Why::None);
+            fe.lock = ws.features ? Lock::Frames : Lock::Nothing;
+        } else if (!ws.extracted) {
+            set(fe, Act::Run);
+            fe.lock = Lock::Nothing;
+        } else if (moved) {
+            set(fe, Act::Redo, Why::Moved);
+        } else if (!rr.present) {
+            set(fe, Act::Reuse, Why::Unrecorded);
+        } else if (!fe.changes.empty()) {
+            set(fe, Act::Redo, Why::Settings);
+        } else if (masks_feed && (makes(mk.act) || rr.masks_id != rec.step(Step::Masks).id)) {
+            // An image is extracted again when its mask file is newer.
+            set(fe, Act::Redo, Why::Masks);
+        } else if (!rr.complete && !ws.matched) {
+            set(fe, Act::Run, Why::Resume);
+            fe.lock = Lock::Nothing;
+        } else {
+            set(fe, Act::Reuse);
+        }
+        // A learned matcher reads only the descriptors it was trained on.
+        if (fe.lock == Lock::None && changed(fe, {"features", "engine"})) fe.lock = Lock::Frontend;
+        choose(ModelPart::Features, fe);
+
+        // Its signature covers every feature file's size, write time and path.
+        if (!ws.matched) {
+            set(ma, Act::Run, ws.matching_part && !makes(fe.act) ? Why::Resume : Why::None);
+            ma.lock = Lock::Nothing;
+        } else if (makes(fe.act)) {
+            set(ma, Act::Redo, Why::Features);
+            ma.lock = Lock::Before;
+        } else if (moved) {
+            set(ma, Act::Redo, Why::Moved);
+        } else if (!rr.present) {
+            set(ma, Act::Reuse, Why::Unrecorded);
+        } else if (!ma.changes.empty()) {
+            set(ma, Act::Redo, Why::Settings);
+        } else {
+            set(ma, Act::Reuse);
+        }
+        if (ma.lock == Lock::None && changed(ma, {"lens", "focal", "camera_mode", "focal_px",
+                                                  "distortion", "data_type", "scan_views"}))
+            ma.lock = Lock::Lens;
+        choose(ModelPart::Matching, ma);
+
+        if (!ws.model) set(mp, Act::Run);
+        else if (makes(ma.act)) set(mp, Act::Redo, Why::Matches);
+        else if (!mp.changes.empty()) set(mp, Act::Redo, Why::Settings);
+        else if (md.why == Why::Resume) set(mp, Act::Run);
+        else set(mp, Act::Redo, md.why);
+        mp.lock = Lock::Always;
+    }
+
+    if (job.lidar_clouds.empty()) return;
+    if (makes(md.act)) {
+        set(al, ws.aligned ? Act::Redo : Act::Run, ws.aligned ? Why::Model : Why::None);
+        al.lock = ws.aligned ? Lock::Before : Lock::Nothing;
+    } else if (!ws.aligned) {
+        set(al, Act::Run);
+        al.lock = Lock::Nothing;
+    } else if (ws.aligned_clouds == job.lidar_clouds &&
+               ws.aligned_kept_frame == job.lidar_in_frame) {
+        set(al, Act::Reuse);
+    } else {
+        set(al, Act::Redo, Why::Settings);
+    }
+    choose(ModelPart::Align, al);
 }
 
 float to_float(const std::string& s) { return (float)std::strtod(s.c_str(), nullptr); }
@@ -349,6 +482,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
     job.max_features = job.max_image_size = 0;
     job.image_gamut.clear();
     job.image_is_linear.reset();
+    job.image_exposure.clear();
     job.point_color_in_image_space = false;
     for (size_t k = 1; k < a.size(); k++) {
         const std::string& flag = a[k];
@@ -384,6 +518,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
         else if (flag == "--image-gamut") job.image_gamut = take();
         else if (flag == "--image-linear") job.image_is_linear = true;
         else if (flag == "--no-image-linear") job.image_is_linear = false;
+        else if (flag == "--image-exposure") job.image_exposure = take();
         else if (flag == "--point-color") job.point_color_in_image_space = take() == "image";
         else if (flag == "--masks") { take(); job.mask_features = true; }
         else if (flag == "--no-masks") job.mask_features = false;
@@ -508,6 +643,7 @@ StepFields masks_fields(const PrepJob& job) {
         add(f, "mask_box_threshold", "", num(job.mask_detector_threshold));
     }
     add(f, "mask_max_size", "", num(job.mask_max_image_size));
+    if (!job.image_exposure.empty()) add(f, "image_exposure", "", job.image_exposure);
     add(f, "mask_threshold", "", num(job.mask_threshold));
     add(f, "mask_nms", "", num(job.mask_nms));
     if (segment) {
@@ -557,6 +693,7 @@ StepFields model_fields(const SfmJob& job) {
     add(f, "exif_attitude", "", sfm_pick(kSfmExifAttitude, job.exif_attitude, 2));
     if (!job.image_gamut.empty()) add(f, "image_gamut", "", job.image_gamut);
     if (job.image_is_linear) add(f, "image_linear", "", onoff(*job.image_is_linear));
+    if (!job.image_exposure.empty()) add(f, "image_exposure", "", job.image_exposure);
     add(f, "point_color", "", job.point_color_in_image_space ? "image" : "srgb");
     if (!job.extra_args.empty()) add(f, "extra_args", "", job.extra_args);
     add_rigs(f, p);
@@ -619,7 +756,31 @@ StepFields geometry_fields(const GeometryJob& g) {
     if (g.normal_jpg) add(f, "jpeg_quality", "", num(g.jpeg_quality));
     if (!g.image_gamut.empty()) add(f, "image_gamut", "", g.image_gamut);
     if (g.image_is_linear) add(f, "image_linear", "", onoff(*g.image_is_linear));
+    if (!g.image_exposure.empty()) add(f, "image_exposure", "", g.image_exposure);
     return f;
+}
+
+void verify_dense_reuse(DatasetPlan& plan, const std::string& dataset, const std::atomic<bool>& cancel) {
+    auto& step = plan[Step::Dense];
+    if (step.act != Act::Reuse) return;
+    auto check = [&] { if (cancel.load()) throw std::runtime_error("dense verification cancelled"); };
+    if (!spirula::dense::artifact_inputs_verified(dataset,check)) {
+        step.act = Act::Redo; step.why = Why::Stale; step.ask = false;
+    }
+}
+
+StepFields dense_fields(const DenseJob& job) {
+    StepFields fields;
+    const auto object = json_parse(spirula::dense::config_json(job.config));
+    for (const auto& [key, value] : object.obj) {
+        if (key == "preset" || key == "device" || key == "memory_budget_bytes" || key == "image_cache_bytes" ||
+            key == "cpu_workers" || key == "resume" || key == "rebuild" || key == "keep_cache") continue;
+        // A record from before reference spacing existed means 0, so such a cloud stays fresh.
+        if (key == "reference_coverage" && value.num == 0) continue;
+        JsonWriter writer; json_write(writer, value);
+        fields.push_back({key, "", writer.str()});
+    }
+    return fields;
 }
 
 std::vector<std::string> geometry_kinds(const GeometryJob& g) {
@@ -632,9 +793,16 @@ std::vector<std::string> geometry_kinds(const GeometryJob& g) {
 PlanJob plan_job(const SfmJob& job) {
     PlanJob p;
     p.prep = job.prep;
+    p.reconstruct = !job.lidar.scanner_only;
     p.model = model_fields(job);
     p.mask_features = job.mask_features;
     p.geometry = job.geometry;
+    // The scans give the run its depth and normals.
+    if (job.lidar.enabled()) p.geometry.enable = false;
+    p.staged = true;
+    p.lidar_clouds = job.lidar.clouds;
+    p.lidar_in_frame = job.lidar.in_frame;
+    p.dense = job.dense;
     return p;
 }
 
@@ -644,6 +812,7 @@ PlanJob plan_job(const ColmapJob& job, const PrepJob& prep) {
     p.model = model_fields(job, prep);
     p.mask_features = job.mask_features;
     p.geometry = job.geometry;
+    p.dense = job.dense;
     return p;
 }
 
@@ -662,6 +831,54 @@ DatasetRecord read_plan_record(const std::string& workspace, const PrepJob& job)
     if (!rec.steps[(int)Step::Frames].present)
         rec.steps[(int)Step::Frames] = legacy_frames(workspace, job);
     return rec;
+}
+
+std::vector<PrepCapture> recorded_captures(const std::string& workspace, const PrepJob& job) {
+    const StepRecord fr = read_plan_record(workspace, job).step(Step::Frames);
+    if (!fr.present || !fr.captures.empty()) return fr.captures;
+    // frames_fields back onto a job, as far as the stems depend on it.
+    PrepJob j = job;
+    j.inputs.clear();
+    for (const StepField& f : fr.fields)
+        if (f.key == "input" && is_video_path(f.value)) {
+            PrepInput in;
+            in.path = f.value;
+            in.is_video = true;
+            in.subdir = f.scope == "." ? "" : f.scope;
+            for (const StepField& r : fr.fields)
+                if (r.key == "fps" && r.scope == f.scope)
+                    in.fps = r.value == "every" ? kFpsEveryFrame : to_float(r.value);
+            j.inputs.push_back(std::move(in));
+        }
+    for (const StepField& f : fr.fields) {
+        if (f.key == "decoder") j.force_external_decode = f.value == "ffmpeg";
+        else if (f.key == "sharp_window") j.sharp_window = (int)to_float(f.value);
+        else if (f.key == "adaptive_fps") j.adaptive_fps = f.value == "on";
+        else if (f.key == "adaptive_range") j.adaptive_range = to_float(f.value);
+        else if (f.key == "sync_tracks") j.sync_tracks = f.value == "on";
+    }
+    std::vector<PrepCapture> out;
+    for (const PrepInput& in : j.inputs) out.push_back(video_capture(j, in));
+    return out;
+}
+
+std::vector<PrepCapture> captures_behind(const PrepJob& job) {
+    std::vector<PrepCapture> out;
+    for (const PrepInput& in : job.inputs) {
+        if (in.is_video) continue;
+        std::error_code ec;
+        const fs::path dir = fs::absolute(in.path, ec).lexically_normal();
+        const fs::path images = dir.has_filename() ? dir : dir.parent_path();
+        if (images.filename() != "images") continue;
+        for (PrepCapture c : recorded_captures(images.parent_path().string(), job)) {
+            if (!fs::is_regular_file(c.path, ec)) continue;
+            c.subdir = in.subdir.empty() ? c.subdir
+                       : c.subdir.empty() ? in.subdir
+                                          : in.subdir + "/" + c.subdir;
+            out.push_back(std::move(c));
+        }
+    }
+    return out;
 }
 
 DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
@@ -727,6 +944,7 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
     const bool masks_feed = masks_reach_features(job.prep, job.mask_features);
     if (fixed(Step::Model)) {
         md = (*done)[Step::Model];
+    } else if (!job.reconstruct) {
     } else if (!ws.model) {
         set(md, Act::Run);
     } else if (req.redo_model) {
@@ -763,6 +981,25 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
         }
         md.changes = std::move(all);
     }
+    if (fixed(Step::Model))
+        std::copy(std::begin(done->parts), std::end(done->parts), std::begin(p.parts));
+    else
+        plan_parts(p, job, ws, rec, req, masks_feed);
+
+    StepPlan& dense = p[Step::Dense];
+    const auto& rd = rec.step(Step::Dense);
+    const auto& dc = job.dense.config;
+    const bool dense_masks = dc.use_masks && (dc.training_masks || dc.alpha_masks || dc.feature_masks);
+    if (fixed(Step::Dense)) dense = (*done)[Step::Dense];
+    else if (!job.dense.enable) {}
+    else if (makes(fr.act) && ws.dense) set(dense, Act::Redo, Why::Frames);
+    else if (makes(md.act) && ws.dense) set(dense, Act::Redo, Why::Model);
+    else if (dense_masks && makes(mk.act) && ws.dense) set(dense, Act::Redo, Why::Stale);
+    else if (!ws.dense) set(dense, Act::Run);
+    else if (req.redo_dense || dc.rebuild) set(dense, Act::Redo, Why::Requested);
+    else if (!rd.present) set(dense, Act::Run, Why::Unrecorded);
+    else if (rd.frames_id != rf.id || rd.model_id != rr.id || (dense_masks && rd.masks_id != rm.id)) set(dense, Act::Redo, Why::Stale);
+    else compare(dense, rd, diff(rd.fields, dense_fields(job.dense)));
 
     StepPlan& g = p[Step::Geometry];
     if (fixed(Step::Geometry)) {
@@ -1003,6 +1240,8 @@ std::vector<std::string> plan_log_lines(Step step, const StepPlan& s,
                                        s.why == Why::Stale))
                 return {L::plan_geometry_stale.get()};
             break;
+        case Step::Dense:
+            return {spirula::i18n::msg::dense::title.get()};
     }
     return {};
 }
@@ -1025,15 +1264,17 @@ void StepRecorder::begin(Step s, StepFields fields, std::vector<std::string> mad
     if (s != Step::Frames) r.frames_id = _ids[(int)Step::Frames];
     if (s == Step::Model) r.masks_id = _ids[(int)Step::Masks];
     if (s == Step::Geometry) r.model_id = _ids[(int)Step::Model];
+    if (s == Step::Dense) { r.model_id = _ids[(int)Step::Model]; r.masks_id = _ids[(int)Step::Masks]; }
     _ids[(int)s] = r.id;
     _open[(int)s] = r;
     write_step_record(_ws, s, r);
 }
 
-void StepRecorder::finish(Step s) {
+void StepRecorder::finish(Step s, std::vector<PrepCapture> captures) {
     StepRecord& r = _open[(int)s];
     if (!r.present) return;
     r.complete = true;
+    r.captures = std::move(captures);
     write_step_record(_ws, s, r);
     r = StepRecord{};
 }

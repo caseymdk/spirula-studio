@@ -25,6 +25,7 @@ struct CombineParams {
 struct RopeParams {
     uint64_t x, freqs;
     uint32_t n, n_heads, head_dim, batch, row_stride, groups_per_row;
+    uint32_t split_half;
 };
 
 // BR in attention.slang: one workgroup owns this many queries, whatever the
@@ -54,8 +55,12 @@ double attention_work(int64_t nq, int64_t nk, const AttnOpts& o) {
     return 2.0 * 4.0 * nq * nk * o.head_dim * o.n_heads * o.batch;
 }
 
+// `plan_nq` x `plan_batch` is the whole problem when this is one slice of it:
+// the key-range split is decided for that, so a query's result does not depend
+// on how the submit budget happened to slice the call.
 void attention_one(const Tensor& out, const Tensor& q, const Tensor& k, const Tensor& v,
-                   int64_t nq, int64_t nk, const AttnOpts& o) {
+                   int64_t nq, int64_t nk, const AttnOpts& o, int64_t plan_nq,
+                   int plan_batch) {
     // The kernel splits head_dim across 16 lanes and caps the per-thread
     // accumulator array at 256/16, so 256 is the ceiling. Any dim up to that is
     // fine -- a dim that does not divide 16 just leaves some lanes idle in the
@@ -103,8 +108,9 @@ void attention_one(const Tensor& out, const Tensor& q, const Tensor& k, const Te
 
     // ---- decide whether to split the key range ----
     uint32_t splits = 1;
-    const uint32_t blocks = gx * (uint32_t)o.n_heads * (uint32_t)o.batch;
-    if (o.arena && o.batch == 1 && blocks < kTargetBlocks &&
+    const uint32_t plan_gx = (uint32_t)((plan_nq + kQueriesPerBlock - 1) / kQueriesPerBlock);
+    const uint32_t blocks = plan_gx * (uint32_t)o.n_heads * (uint32_t)plan_batch;
+    if (o.arena && plan_batch == 1 && blocks < kTargetBlocks &&
         nk >= 2 * (int64_t)kMinKeysPerSplit) {
         splits = std::min(kTargetBlocks / std::max(blocks, 1u),
                           (uint32_t)(nk / kMinKeysPerSplit));
@@ -128,7 +134,7 @@ void attention_one(const Tensor& out, const Tensor& q, const Tensor& k, const Te
     // models is 16, 32, 64 or 256. attention_coop.slang says why P @ V stays on
     // the scalar path.
     const vk::Context& ctx = vk::Context::get();
-    const bool coop = coop_matrix_enabled() && o.head_dim % 16 == 0;
+    const bool coop = o.allow_coop && coop_matrix_enabled() && o.head_dim % 16 == 0;
     const char* entry = coop ? "attention_coop.flash_attn_coop" : "attention.flash_attn";
     vk::SpecList espec = spec;
     if (coop) espec.values[espec.count++] = 256u / ctx.preferredSubgroupSize();
@@ -176,7 +182,7 @@ void attention(const Tensor& out, const Tensor& q, const Tensor& k, const Tensor
     NN_CHECK(o.head_dim > 0 && o.n_heads > 0, "attention: head_dim/n_heads unset");
     const double cap = vk::Stream::get().workCap();
     const double work = attention_work(nq, nk, o);
-    if (cap <= 0 || work <= cap) return attention_one(out, q, k, v, nq, nk, o);
+    if (cap <= 0 || work <= cap) return attention_one(out, q, k, v, nq, nk, o, nq, o.batch);
 
     const int64_t dim = (int64_t)o.n_heads * o.head_dim;
     const int64_t qs = o.q_stride > 0 ? o.q_stride : dim;
@@ -196,27 +202,28 @@ void attention(const Tensor& out, const Tensor& q, const Tensor& k, const Tensor
             if (o.bias_mode == AttnBias::Window) so.labels = o.labels.offsetElems(b0 * nq);
             attention_one(out.offsetElems(b0 * nq * os), q.offsetElems(b0 * nq * qs),
                           k.offsetElems(b0 * nk * ks), v.offsetElems(b0 * nk * vs), nq, nk,
-                          so);
+                          so, nq, o.batch);
         }
         return;
     }
     // A window's labels are indexed by absolute query and key, so a lone window
     // is not sliced; one is ws^2 tokens and nowhere near the budget.
-    if (o.bias_mode == AttnBias::Window) return attention_one(out, q, k, v, nq, nk, o);
+    if (o.bias_mode == AttnBias::Window) return attention_one(out, q, k, v, nq, nk, o, nq, 1);
     const int64_t per =
         std::max<int64_t>(1, (int64_t)(cap / (work / nq)) / kQueriesPerBlock) *
         kQueriesPerBlock;
     for (int64_t q0 = 0; q0 < nq; q0 += per) {
         if (o.bias_mode == AttnBias::Full) so.bias = o.bias.offsetElems(q0 * so.bias_stride_q);
         attention_one(out.offsetElems(q0 * os), q.offsetElems(q0 * qs), k, v,
-                      std::min(per, nq - q0), nk, so);
+                      std::min(per, nq - q0), nk, so, nq, 1);
     }
 }
 
 void rope(const Tensor& x, const Tensor& freqs, int n_heads, int head_dim, int64_t n,
-          int batch, int64_t row_stride) {
+          int batch, int64_t row_stride, bool split_half) {
     NN_CHECK(x.dtype == DType::F32, "rope operates in place on f32");
-    NN_CHECK((head_dim & 1) == 0, "rope: head_dim must be even");
+    NN_CHECK(head_dim > 0 && n_heads > 0 && n > 0 && batch > 0 && (head_dim & 1) == 0,
+             "rope: dimensions must be positive and head_dim even");
     NN_CHECK(freqs.numel() >= n * (head_dim / 2) * 2,
                "rope: frequency table is too small for %lld tokens", (long long)n);
     RopeParams p{};
@@ -227,8 +234,10 @@ void rope(const Tensor& x, const Tensor& freqs, int n_heads, int head_dim, int64
     p.head_dim = (uint32_t)head_dim;
     p.batch = (uint32_t)batch;
     p.row_stride = (uint32_t)(row_stride > 0 ? row_stride : (int64_t)n_heads * head_dim);
+    p.split_half = split_half ? 1u : 0u;
     const int64_t total = (int64_t)batch * n * n_heads * (head_dim / 2);
-    vk::Stream::get().dispatchFlat("misc.rope_apply", {0u, 0u}, total, 256, &p, sizeof(p),
+    const KernelName entry = span_entry("misc.rope_apply", {x, freqs});
+    vk::Stream::get().dispatchFlat(entry, {0u, 0u}, total, 256, &p, sizeof(p),
                                    &p.groups_per_row);
 }
 

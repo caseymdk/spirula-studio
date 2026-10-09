@@ -131,6 +131,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, save_only_latest_checkpoint, true, "run", "advanced", "")        \
     X(bool, save_full_checkpoint, false, "run", "advanced", "")              \
     X(bool, save_eval_images, false, "run", "advanced", "")                  \
+    X(bool, log_performance, false, "run", "advanced", "")                   \
     X(int, viewer_port, 7007, "run", "advanced", "")                         \
     X(bool, disable_viewer, false, "run", "advanced", "")                    \
     X(bool, keep_viewer_alive, true, "run", "advanced", "")                  \
@@ -157,12 +158,18 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, init_ply_add_points, false, "dataset", "advanced", "")           \
     X(std::string, partition, "", "dataset", "advanced", "<file>.json")      \
     X(int, partition_part, -1, "dataset", "advanced", "")                    \
-    X(std::string, roi_region, "", "dataset", "advanced", "<file>.json")     \
+    X(std::string, roi_region, "", "dataset", "advanced", "<data>/<file>.json") \
     X(float, roi_outside_weight, 1e-4f, "dataset", "advanced", "")           \
     X(float, roi_outside_opacity_decay, 1.0f, "dataset", "advanced", "")     \
     X(bool, roi_mask_pixels, true, "dataset", "advanced", "")                \
     X(float, train_resolution_divisor, 0.0f, "dataset", "basic", "")         \
     X(std::string, downscale_rounding_mode, "floor", "dataset", "advanced", "floor|ceil|round") \
+    X(bool, progressive_resolution, false, "dataset", "basic", "")           \
+    X(int, progressive_resolution_start, 4, "dataset", "advanced", "")       \
+    X(float, progressive_resolution_full_at, 0.3f, "dataset", "advanced", "") \
+    X(std::string, progressive_resolution_schedule, "", "dataset", "advanced", "none") \
+    X(bool, progressive_splat_budget, true, "dataset", "advanced", "")       \
+    X(std::string, progressive_splat_budget_schedule, "", "dataset", "advanced", "none") \
     X(std::string, eval_mode, "all", "dataset", "advanced", "fraction|filename|interval|all") \
     X(int, eval_interval, 8, "dataset", "advanced", "")                      \
     X(float, train_split_fraction, 0.9f, "dataset", "advanced", "")          \
@@ -179,7 +186,8 @@ inline bool train_choices_free_form(const char* choices) {
     X(std::string, center_method, "poses", "scene", "expert", "poses|focus|none|gsplat") \
     X(bool, auto_scale_poses, true, "scene", "expert", "")                   \
     X(float, outlier_threshold, kTrainInf, "scene", "basic", "")             \
-    X(std::string, scene_center, "none", "scene", "basic", "none|point-median|camera-median|camera-focus|point-mean|camera-mean") \
+    X(std::string, scene_center, "auto", "scene", "basic", "auto|none|point-median|camera-median|camera-focus|point-mean|camera-mean") \
+    X(float, scene_center_threshold, 20.0f, "scene", "expert", "")           \
     X(std::optional<float>, relative_scale, std::nullopt, "scene", "expert", "") \
     X(std::string, train_frame, "points", "scene", "expert", "normalized|camera|points") \
                                                                              \
@@ -406,7 +414,8 @@ struct TrainConfig {
     X(depth_dir) X(normal_dir) X(metashape_xml) X(metashape_ply) \
     X(metashape_psx) X(train_resolution_divisor) X(downscale_rounding_mode) \
     X(exif_orientation) X(orientation_method) X(center_method) X(auto_scale_poses) \
-    X(outlier_threshold) X(scene_center) X(train_frame) X(eval_mode) X(train_split_fraction) \
+    X(outlier_threshold) X(scene_center) X(scene_center_threshold) X(train_frame) X(eval_mode) \
+    X(train_split_fraction) \
     X(eval_interval) X(depth_unit_scale_factor) X(validation_fraction) \
     X(warp_to_pinhole) X(warp_spherical_to_pinhole) X(warp_face_fit) \
     X(warp_back_face) \
@@ -414,6 +423,7 @@ struct TrainConfig {
     X(load_depths) X(load_normals) X(relative_scale) \
     X(cap_max) X(random_init) X(random_init_fraction) X(random_init_distribution) \
     X(random_init_center) X(random_init_spread) X(random_init_std) \
+    X(roi_region) \
     /* end */
 
 

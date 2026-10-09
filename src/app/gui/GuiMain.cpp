@@ -13,6 +13,7 @@
 #include "app/gui/GuiApp.h"
 #include "app/gui/Layout.h"
 #include "app/gui/NavCamera.h"
+#include "app/gui/VulkanPrime.h"
 #include "i18n/catalog/Brand.h"
 
 #ifdef _WIN32
@@ -158,6 +159,8 @@ int spirula_gui_main(int argc, char** argv) {
     set_no_auto_fetch();
     // Before the window maps: that is when the shell looks up its entry.
     gui::register_desktop_entry();
+    // Must precede any GL context (VulkanPrime.h).
+    gui::prime_vulkan_driver();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) {
@@ -294,6 +297,7 @@ int spirula_gui_main(int argc, char** argv) {
             // After the backend's own mouse update, so an injected position
             // is the later event and wins for this frame.
             const bool scripted = gui::automation::begin_frame();
+            if (const auto d = gui::automation::take_drop(); !d.empty()) app.handle_drop(d);
             ImGui::NewFrame();
             app.frame();
             const bool busy = ui_busy() || scripted || app.animating();

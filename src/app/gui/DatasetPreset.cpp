@@ -3,6 +3,7 @@
 #include "app/gui/DatasetPreset.h"
 
 #include "data/JsonField.h"
+#include "dense/ConfigFields.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -17,6 +18,10 @@ namespace {
 // clicks, the fitted borders, the tool paths and the redo-a-step flags.
 #define SS_DATASET_PRESET_FIELDS(X)                                           \
     X("engine_colmap",              colmap_engine)                            \
+    X("dense_enable",               sfm.dense.enable)                         \
+    X("dense_use_for_training",     sfm.dense.use_for_training)               \
+    X("dense_log_performance",      sfm.dense.log_performance)                \
+    X("dense_config",               sfm.dense.config)                         \
     /* ---- input handling and frame extraction ---- */                       \
     X("resume",                     sfm.prep.resume)                          \
     X("photo_import",               sfm.prep.photo_import)                    \
@@ -38,6 +43,7 @@ namespace {
     /* ---- colour space ---- */                                              \
     X("image_gamut",                sfm.image_gamut)                          \
     X("image_is_linear",            sfm.image_is_linear)                      \
+    X("image_exposure",             sfm.image_exposure)                       \
     X("point_color_in_image_space", sfm.point_color_in_image_space)           \
     /* ---- masking ---- */                                                   \
     X("mask_enable",                sfm.prep.mask_enable)                     \
@@ -135,6 +141,11 @@ void clamp_to(T& v, T lo, T hi) { v = std::clamp(v, lo, hi); }
 template <typename E>
 void clamp_enum(E& v, int lo, int hi) { v = (E)std::clamp((int)v, lo, hi); }
 
+// An index into one of SfmRunner.h's spelling tables: a hand-written bound
+// falls behind the day the table grows.
+template <int N>
+void clamp_index(int& v, const char* const (&)[N]) { v = std::clamp(v, 0, N - 1); }
+
 // One of `options`, or the first of them. A model name the runners do not
 // know reconstructs into nothing, so a hand-edited file cannot carry one.
 void clamp_choice(std::string& v, const char* const* options, int n) {
@@ -205,6 +216,7 @@ bool dataset_apply_preset(DatasetSettings& s, const std::string& name) {
 
 
 void sanitize_dataset_settings(DatasetSettings& s) {
+    s.colmap.dense = s.sfm.dense;
     PrepJob& p = s.sfm.prep;
     clamp_enum(p.photo_import, 0, kNumPhotoImports - 1);
     clamp_enum(p.pano.mode, 0, (int)app::Pano360Mode::Equirect);
@@ -233,18 +245,18 @@ void sanitize_dataset_settings(DatasetSettings& s) {
     clamp_to(g.face_res, 0, 1);
 
     SfmJob& j = s.sfm;
-    clamp_to(j.quality, 0, 3);
-    clamp_to(j.data_type, 0, 2);
-    clamp_to(j.camera_mode, 0, 2);
-    clamp_to(j.pairs, 0, 3);
+    clamp_index(j.quality, kSfmQuality);
+    clamp_index(j.data_type, kSfmDataType);
+    clamp_index(j.camera_mode, kSfmCameraMode);
+    clamp_index(j.pairs, kSfmPairs);
     clamp_to(j.overlap, 1, 1000);
     clamp_to(j.distortion_refine, 0, 2);
-    clamp_to(j.mapper, 0, 1);
-    clamp_to(j.features, 0, 2);
+    clamp_index(j.mapper, kSfmMapper);
+    clamp_index(j.features, kSfmFeatures);
     clamp_to(j.matcher, 0, 1);
-    clamp_to(j.metric_gps, 0, 3);
-    clamp_to(j.sensor_gauge, 0, 2);
-    clamp_to(j.exif_attitude, 0, 2);
+    clamp_index(j.metric_gps, kSfmMetricGps);
+    clamp_index(j.sensor_gauge, kSfmSensorGauge);
+    clamp_index(j.exif_attitude, kSfmExifAttitude);
     clamp_to(j.max_features, 0, 1000000);
     clamp_to(j.max_image_size, 0, 32768);
     j.init_focal_px = std::max(0.0f, j.init_focal_px);

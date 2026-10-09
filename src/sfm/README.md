@@ -182,6 +182,14 @@ Two devices deserve naming:
   (7e-5 relative, against 1e-11 on hardware). The mapper's own checks still
   pass; treat llvmpipe as a way to run the pipeline, not to trust its last bits.
 
+No shader here uses subgroup operations, so the module runs at whatever width
+the driver picks (RADV: 64). Where the device offers both 32 and 64 (AMD
+RDNA), `rdnaSubgroupWidth` in `vk/VkContext.h` pins the kernels whose widths
+measured apart: blur, orientation and descriptor at 32 and the rest of SIFT
+and the matcher at 64 took extraction 7.9% under RADV's all-64 (150
+1080x1440 frames on a Ryzen 7000 iGPU, features bit-identical). Bundle
+adjustment measured within 1% either way and is left to the driver.
+
 ## Layout
 
 ```
@@ -641,7 +649,7 @@ future sensor implements the same way (`core/PriorSource.h`;
   quantity is re-estimated from the poses before each solve and frozen inside
   the factors, so the solver carries no global parameter and the model stays
   in its own gauge; the finishing gauge fit above then runs as before.
-- **Pairing** (`--sensor-pairs`, on): images the GPS puts within
+- **Pairing** (`--sensor-pairs`, off): images the GPS puts within
   `--sensor-pair-radius` metres (20) of each other are matched whatever the
   shortlist thought.
 
@@ -665,6 +673,22 @@ factor while the altitudes agree with the fit to within its inlier radius
 ends with how many registrations the gyro re-solved or refused and how many
 factors the last solve held; `SS_SFM_PRIOR_DUMP=1` prints each one. With no
 telemetry none of it runs and the pipeline is the one before it existed.
+
+During growth with GPS (`--gps-scale-band`, on) each registration reads the chain it
+extends against the GPS: model over GPS chord sums between nodes 5 m apart on the model's own
+path, over 60, 100 and 150 m, against the whole model's ratio (`map/BlockScale.h`). Past
+5 / 4 / 3 % a bundle adjustment is requested for the frames registered since the last BA
+(detection only -- nothing is rescaled); once growth ends, the strongest of the last 20
+readings is held to 4 / 3 / 2.5 %. A length is read only where its threshold clears three
+times the spread of the readings taken so far (the lower quartile of |x| over 0.3186, from 20
+readings, seeded from the model growth started with): GPS wander shows there and a drifted
+block, up to a third of the readings, does not. Four Insta360 tracks' readings spread 4.5 / 2.8 / 2.1 % (drone-grade GPS: 0.8 /
+0.6 / 0.45) and had asked for 28 BAs that moved none of them; the fit's own RMS would not do,
+since a stretched tail alone lifts it.
+`SS_SFM_SCALE_DUMP=1` prints every reading. On the
+bottom-up/atoms path (`map/Assemble.h`'s `growModels`) a request `growByPnP` raises is
+recorded but its `post` reading is never filled -- that model's BA is the caller's later
+joint solve, not one this check runs itself.
 
 The sources run in order -- the video's sensors, the recorded attitude, a
 metric reference, the fallback -- and read each other: `gauge.txt`'s two bits
@@ -715,8 +739,8 @@ error.
 pair on, instead of after enough frames registered each lens on its own.
 `kind: dual-fisheye` (`--rig dual-fisheye=...`) says the first two members are
 the back-to-back lenses of one 360 camera: the second turned 180 degrees about
-the image's vertical, refined in all 6 DOF; `refine: axial` holds the baseline
-to the lens's optical axis.
+the image's vertical, its rotation refined and its baseline held to the lens's
+optical axis (`refine: axial`).
 Insta360 X, DJI Osmo 360 and a PortalCam's two fisheyes all calibrate within
 0.8-1.4 degrees of that rotation, so it is refined; the Osmo and the PortalCam,
 measured against something metric, put the baseline within a millimetre of
@@ -1017,6 +1041,40 @@ it.
   twelve intrinsics columns of the reduced system — so on anything but a small
   capture `--ba-solver auto` lands on CG.
 
+The last assembly pass, before those, is the seam weld (`--seam-weld`, 0.25). Two
+registration fronts that meet on thin support leave every point there twice, metres
+apart; no merge test accepts that union and the epipolar check cannot see an offset
+along the baseline. A verified pair of `seam_min_matches` (100) or more whose matches
+the model explains by a shared point below the bar is a candidate. Loop revisits and
+weak woods pairs read as low as the seam (220-481 candidates per canopy-capture model), and
+what separates them is the neighbourhood: a seam link's two images share at most one
+third image that both see with `seam_covis_min` (20) points, a loop revisit dozens. A
+candidate is open when that count is at most 1, the pair is not two lenses of one rig
+frame (back-to-back fisheyes share only their rims), its duplicated points sit no more
+than half the scene depth apart, and either they sit a coherent 10 % of it apart, or --
+in capture order, when the pair is at most 3 positions apart -- its rotation is 10x its
+neighbours' per-position rotation. Past half the depth the duplicates are other
+structure: four identical gates filmed from both sides read 1-9.
+With capture order every open pair must be 3 positions apart or fewer. Capture order
+is a declared `--sequence`, or with `--pairs sequential` each folder's images in file
+order; a photo folder has none, so only the offset branch runs. The open pairs'
+duplicated points are fused at the track-length-weighted mean and the model is
+refined with the fused points spared the first round's filter, then forced through a
+second round without retriangulation -- one round rarely closes a large kink before
+the ordinary stopping test exits it (a canopy drone capture: 2.95->1.19 deg and 3.20->0.78 deg).
+The weld is then judged and undone -- the model returned exactly as it came -- unless it
+held: no image dropped, no open pair left less tied than before, at least half of the ties
+fusing added still there, and the reprojection no more than 10 % worse. A seam's duplicates
+are one point seen twice and keep their ties (100 % in `sfm_seam_weld_test`); repeated
+structure, junk or a misplaced image cannot, short of dragging the model (a phone burst around
+one misplaced frame: -1 %, while the refine moved cameras by 8 % of the model; the gates as
+an unordered folder: 30 %, where the unguarded weld lost every image).
+On 27 saved models
+(a canopy drone capture, a power-corridor capture, a no-GPS Osmo 360 clip, an Avata 360 flight), measured offline, the rule flags
+only links at the canopy capture's seam (at most 3 per model) and nothing on the other captures. `[seam]` lines report what it found; under
+`SS_SFM_MAP_PROF` the models as they were before a weld are written to
+`sparse/pre_weld/` (in the mapper's frame, not the gauge's).
+
 `--mapper flat|bottom-up` picks the schedule (see the stage graph; flat is the
 default for every capture, and there is no size-based switch);
 `--bup-atom-size` and `--bup-overlap` size the atoms and the overlap the
@@ -1031,6 +1089,57 @@ which now exists on both commands. And `auto` accepts every advanced flag
 `extract`, `match` and `map` accept, since it runs those stages — a run can be
 tuned without decomposing it into three commands, and the GUI's editor has one
 command's worth of fields to show.
+
+## Memory on a large capture
+
+What grows with the capture, and what each costs, on a 4000-image
+dual-fisheye video (`--quality high`: 31.7M features, 225M verified matches,
+16M observations in the last bundle adjustment):
+
+- **Matching** reads descriptors where they lie: `loadFeatureDir` maps each
+  feature file (`FeatureSet::desc_map`) instead of copying 128 bytes a
+  feature into the heap, so they are page cache the OS can drop and read back
+  rather than 4 GB that has to fit; the matcher's device copy has its own
+  bound (`descriptor_budget_bytes`). Pair selection's shortlist pass scores a
+  block of rows at a time and keeps each image's best partners in a bounded
+  heap (`TopPartners`), `n x k` edges where it held all `n^2/2` pairs twice --
+  2 GB at 12k images, 8 GB at 24k. `matches.bin` comes out byte for byte the
+  same either way.
+- **Each verified match** costs 8 bytes in its pair's list (`FeatureMatch`
+  keeps no descriptor distance; only a matcher's own cap ever read one) and 8
+  in the correspondence graph (two one-word entries, `CorrespondenceGraph.h`),
+  where it cost 12 and 16. Past 256 MB each, both then leave the heap: the
+  pair lists and the graph are written to files in the workspace
+  (`.spirula-matches.spill`, `.spirula-graph-N.spill`) and mapped back
+  (`core/Spill.h`, `MatchList`, `CorrespondenceGraph::spill`). Neither is
+  written again, so while memory lasts the page cache holds them and nothing
+  slows down; when it does not, the OS reads pages back instead of the run
+  failing. On Linux the files are gone as soon as they are mapped; elsewhere
+  they go when the run ends.
+- **The mapper's undo snapshot** (`checkedRefine`) copies registered images
+  without their keypoints, and a model snapshot for output (`registeredCopy`)
+  never copies the unregistered images it would then drop.
+- **A device bundle adjustment** frees its ~55 bytes an observation of host
+  tables once they are uploaded; a fall to the host rebuilds them
+  (`ba/README.md`, "Watchdog").
+- **VRAM** is the bundle adjustment's: `ba/README.md`, "Buffers past 4 GB, and
+  compact Jacobians". Its Jacobians are split so no binding passes the
+  device's limit, which on NVIDIA used to corrupt every solve past a 4 GB
+  `Jc` silently, and are stored at fp32 when a solve would not otherwise fit.
+
+On that capture the mapping run's peak heap went from 11.4 GB to 5.1 GB
+(another 4 GB of mapped file pages are resident while memory is free) and VRAM
+stayed 7 GB; with the host-side changes alone, a 300-image subset of it writes
+a byte-identical model (`--ba-real cpu`, the deterministic path) in 1.07 GB
+where it took 1.27.
+
+Three times longer -- every frame of a 6290-frame Osmo 360 walk, 12580 images,
+757M verified matches, 54M observations in the last solves, RTX 5070 (12 GB),
+mapping in a 28 GB memory cgroup without swap -- the run before these changes
+was killed at 28 GB of heap 4566 images in. Now all 12580 register in one model
+(0.62 px), in 1 h 31 of mapping: the heap stays under 14 GB, solves past 29M
+observations take the fp32 Jacobians, and only the last, at 53.4M and up, go to
+the host, where it peaks at 22.7 GB.
 
 ## Tests
 
@@ -1050,6 +1159,9 @@ PASS/FAIL and returns 0/1 — the same convention as `src/backend/tests/`.
 | `sfm_mask_test` | mask uv sampling, decode, file discovery | no |
 | `sfm_telemetry_test` | the four telemetry carriers on synthetic files, and the sanity checks; `sfm_telemetry_test FILE` prints what a video carries | no |
 | `sfm_sequence_test` | the sequence table and its window pairs (`--no-gpu` stops there); a synthetic walk past a duplicated room through the mapper | yes |
+| `sfm_seam_weld_test` | the open-seam detector and weld on a two-front track, with and without capped GPS solves; what it leaves alone (duplicates too far apart, rig mates) and a weld it undoes (a perturbed copy) | yes |
+| `sfm_block_scale_test` | the block scale statistic on synthetic tracks: a hover, a loop, a stalled receiver, a rig, two fronts, the seam-jump mask over a model-space discontinuity, the noise gate | no |
+| `sfm_gps_scale_test` | the block scale check during growth (`--gps-scale-band`) on a corridor with a hover and a loop, true scale and with its GPS tail stretched | yes |
 | `sfm_prior_test` | pose priors in bundle adjustment: Jacobians against central differences, device against host, a gauge recovered from priors alone (`--no-gpu` keeps to the host) | yes |
 | `sfm_sensor_prior_test` | the fixed-rotation two-view and PnP estimators on scenes with equipment and outliers; the telemetry source's calibration, rotations and factors on the synthetic walk | no |
 

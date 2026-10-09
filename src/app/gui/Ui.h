@@ -27,12 +27,14 @@
 // one message therefore share an ID too -- wrap one in ImGui::PushID() exactly
 // as you would for two identical literals.
 
+#include "app/gui/Automation.h"
 #include "app/gui/Layout.h"
 #include "i18n/Message.h"
 
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
+#include <cstddef>
 #include <cfloat>
 #include <string>
 #include <vector>
@@ -63,6 +65,17 @@ inline const char* label(const Msg& m) { return label(m.get(), m.id); }
 
 inline const char* label(const std::string& text, const Msg& m) {
     return label(text.c_str(), m.id);
+}
+
+// ImGui's combo reports no label to the item hooks (Automation.h), so a script
+// could not find it by its message id. The id is taken first: an open popup
+// moves ImGui's last item.
+template <class Draw>
+inline bool named_combo(const char* label, Draw&& draw) {
+    const ImGuiID id = ImGui::GetID(label);
+    const bool r = draw();
+    ::gui::automation::name_item(id, label);
+    return r;
 }
 
 // Msg* list -> the const char*[] ImGui's Combo wants.
@@ -268,6 +281,9 @@ inline bool InvisibleButtonRaw(const char* id, const ImVec2& size,
 inline bool Checkbox(const Msg& m, bool* v) {
     return ImGui::Checkbox(detail::label(m), v);
 }
+inline bool Checkbox(const Msg& m, std::initializer_list<Arg> a, bool* v) {
+    return ImGui::Checkbox(detail::label(format(m, a), m), v);
+}
 inline bool CheckboxRaw(const char* id, bool* v) {
     return ImGui::Checkbox(id, v);
 }
@@ -285,6 +301,10 @@ inline bool SelectableRaw(const std::string& s, bool selected = false) {
 }
 inline bool SelectableRaw(const char* s, bool selected, ImGuiSelectableFlags f) {
     return ImGui::Selectable(s, selected, f);
+}
+inline bool SelectableRaw(const char* s, bool selected, ImGuiSelectableFlags f,
+                          const ImVec2& size) {
+    return ImGui::Selectable(s, selected, f, size);
 }
 inline bool RadioButtonRaw(const char* s, bool active) {
     return ImGui::RadioButton(s, active);
@@ -318,6 +338,11 @@ inline bool MenuItem(const Msg& m, std::initializer_list<Arg> a) {
 inline bool MenuItemRaw(const char* s, bool selected = false) {
     return ImGui::MenuItem(s, nullptr, selected);
 }
+// ... and one with a dim note where a shortcut would go. No defaults, so a
+// two-argument call cannot convert the note to `selected`.
+inline bool MenuItemRaw(const char* s, const char* note, bool selected, bool enabled) {
+    return ImGui::MenuItem(s, note, selected, enabled);
+}
 inline bool BeginTabItem(const Msg& m, ImGuiTabItemFlags flags = 0) {
     return ImGui::BeginTabItem(detail::label(m), nullptr, flags);
 }
@@ -325,6 +350,9 @@ inline bool CollapsingHeader(const Msg& m, ImGuiTreeNodeFlags flags = 0) {
     return ImGui::CollapsingHeader(detail::label(m), flags);
 }
 inline bool TreeNode(const Msg& m) { return ImGui::TreeNode(detail::label(m)); }
+inline bool TreeNode(const Msg& m, std::initializer_list<Arg> a) {
+    return ImGui::TreeNode(detail::label(format(m, a), m));
+}
 inline void SeparatorText(const Msg& m) {
     ImGui::SeparatorText(detail::label(m));
 }
@@ -348,7 +376,8 @@ inline bool BeginPopupModalRaw(const char* title, bool* open = nullptr,
 
 inline bool Combo(const Msg& m, int* cur, std::initializer_list<const Msg*> its) {
     const auto& v = detail::items(its);
-    return ImGui::Combo(detail::label(m), cur, v.data(), (int)v.size());
+    const char* l = detail::label(m);
+    return detail::named_combo(l, [&] { return ImGui::Combo(l, cur, v.data(), (int)v.size()); });
 }
 inline bool ComboRaw(const char* id, int* cur, const char* const items[],
                      int count) {
@@ -368,7 +397,8 @@ inline bool ComboRaw(const char* id, int* cur, const std::vector<const Msg*>& it
     return ImGui::Combo(id, cur, v.data(), (int)v.size());
 }
 inline bool BeginCombo(const Msg& m, const char* preview, ImGuiComboFlags flags = 0) {
-    return ImGui::BeginCombo(detail::label(m), preview, flags);
+    const char* l = detail::label(m);
+    return detail::named_combo(l, [&] { return ImGui::BeginCombo(l, preview, flags); });
 }
 inline bool BeginComboRaw(const char* id, const char* preview) {
     return ImGui::BeginCombo(id, preview);
@@ -460,12 +490,23 @@ inline bool InputDoubleRaw(const char* id, double* v, double step,
 inline bool InputInt2Raw(const char* id, int v[2], ImGuiInputTextFlags flags = 0) {
     return ImGui::InputInt2(id, v, flags);
 }
+inline bool InputInt2(const Msg& m, int v[2], ImGuiInputTextFlags flags = 0) {
+    return ImGui::InputInt2(detail::label(m), v, flags);
+}
+inline bool InputDouble(const Msg& m, double* v, const char* fmt) {
+    return ImGui::InputDouble(detail::label(m), v, 0.0, 0.0, fmt);
+}
 inline bool DragFloatRaw(const char* id, float* v, float speed, float lo,
                          float hi, const char* fmt) {
     return ImGui::DragFloat(id, v, speed, lo, hi, fmt);
 }
 inline bool DragFloat3Raw(const char* id, float v[3], float speed, const char* fmt) {
     return ImGui::DragFloat3(id, v, speed, 0.0f, 0.0f, fmt);
+}
+// Doubles, for coordinates a geo-referenced model puts beyond float's reach.
+inline bool DragDoubleNRaw(const char* id, double* v, int n, float speed, double lo,
+                           double hi, const char* fmt) {
+    return ImGui::DragScalarN(id, ImGuiDataType_Double, v, n, speed, &lo, &hi, fmt);
 }
 inline bool InputTextHintBufRaw(const char* id, const Msg& hint, char* buf,
                                 size_t buf_size) {

@@ -12,6 +12,7 @@
 // GUI (gui/); this file adds CLI parsing, --help, progress printing and the
 // web viewer wiring.
 
+#include "app/DeviceIssue.h"
 #include "app/Tools.h"
 #include "app/TrainerCore.h"
 #include "app/webviewer/Viewer.h"
@@ -21,9 +22,11 @@
 #include "i18n/catalog/TrainFields.h"
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -33,6 +36,13 @@
 #include <thread>
 #include <vector>
 #include "core/Env.h"
+#ifdef _WIN32
+#include <io.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>   // NOMINMAX comes from cmake/SsOptions.cmake
+#else
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -40,6 +50,27 @@ using namespace spirula;
 
 namespace cmsg = spirula::i18n::msg::cli;
 using spirula::i18n::format;
+
+// Ctrl-C during training stops after the step and saves a resumable checkpoint.
+// A second one is the user saying they meant it: the default action ends the process.
+static std::atomic<std::atomic<bool>*> g_train_stop{nullptr};
+static std::atomic<bool> g_train_interrupted{false};
+static std::string g_train_stopping;   // formatted before the handler can run
+
+extern "C" void trainOnInterrupt(int sig) {
+    std::atomic<bool>* stop = g_train_stop.load();
+    if (g_train_interrupted.exchange(true) || !stop) {
+        std::signal(sig, SIG_DFL);
+        std::raise(sig);
+        return;
+    }
+    stop->store(true);
+#ifdef _WIN32
+    _write(2, g_train_stopping.data(), (unsigned)g_train_stopping.size());
+#else
+    if (::write(2, g_train_stopping.data(), g_train_stopping.size()) < 0) {}
+#endif
+}
 
 
 // ===========================================================================
@@ -219,6 +250,37 @@ std::string help_summary(const char* text, size_t max_columns = 110) {
 
 // ---- Compute device listing / selection -----------------------------------
 
+// A Windows console renders ANSI colour only once asked to; a pipe or a file
+// gets plain text.
+bool stderr_takes_color() {
+#ifdef _WIN32
+    if (!_isatty(_fileno(stderr))) return false;
+    HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD mode = 0;
+    if (!GetConsoleMode(h, &mode)) return false;
+    return (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) ||
+           SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#else
+    return isatty(fileno(stderr));
+#endif
+}
+
+// In orange, on stderr: it has to survive `> train.log`.
+void warn_device_issue(const backend::DeviceInfo& d) {
+    const app::DeviceIssueText t = app::device_issue_text(d.issue);
+    if (!t.title) return;
+    const bool color = stderr_takes_color();
+    const char* bold = color ? "\x1b[1;38;5;208m" : "";
+    const char* on = color ? "\x1b[38;5;208m" : "";
+    const char* off = color ? "\x1b[0m" : "";
+    std::fprintf(stderr, "%s%s%s\n", bold, t.title->get(), off);
+    for (const std::string& line : i18n::wrap(format(*t.body, {d.name}), 76))
+        std::fprintf(stderr, "%s  %s%s\n", on, line.c_str(), off);
+    std::fprintf(stderr, "%s  %s%s\n", on,
+                 format(cmsg::details_line, {t.url}).c_str(), off);
+    std::fflush(stderr);
+}
+
 // Applies --device through the backend-neutral device API, then prints the
 // device table VkSplat-style (all visible devices, '*' on the one in use).
 // Vulkan takes the shared selector forms, CUDA only a nonnegative ordinal.
@@ -283,6 +345,7 @@ void select_and_print_devices(const std::string& requested, bool requested_set) 
                         format(cmsg::device_uuid_line, {d.uuid}).c_str());
     }
     std::fflush(stdout);
+    if (cur >= 0) warn_device_issue(backend::device_info(cur));
 }
 
 // `max_tier` is a rank into kTrainTiers: 0 lists only the flags a first run
@@ -545,7 +608,23 @@ int spirula_train_main(int argc, char** argv) {
                 std::fflush(stdout);
             }
         };
+        const bool stop_on_interrupt = cfg.steps_per_save != 0;
+        if (stop_on_interrupt) {
+            g_train_stopping = std::string("\n") + cmsg::train_stopping.get() + "\n";
+            g_train_stop.store(&session.stop_requested);
+            std::signal(SIGINT, trainOnInterrupt);
+        }
         session.train(cb);
+        if (stop_on_interrupt) {
+            std::signal(SIGINT, SIG_DFL);
+            g_train_stop.store(nullptr);
+        }
+        if (g_train_interrupted.load()) {
+            std::printf("%s\n", format(cmsg::train_stopped_resume,
+                                       {(long long)session.cur_step.load(), cfg.num_iterations,
+                                        fs::absolute(session.out_dir).string()}).c_str());
+            return 130;   // the shell's convention for SIGINT, 128 + 2
+        }
         // Held-out eval. Replaces the engine's DataManager, so nothing may
         // train afterwards -- and the viewer, which only reads splats, is
         // unaffected. TODO: early stopping on the validation split.

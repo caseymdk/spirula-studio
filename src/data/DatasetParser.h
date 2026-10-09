@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -147,9 +148,13 @@ struct DatasetParserConfig {
     float outlier_threshold = std::numeric_limits<float>::infinity();
 
     // Which point of the raw frame becomes the training frame's origin: a
-    // dsparse::CenterMode name. Computed over ALL post-outlier frames and every
-    // seed point, in double, before anything is narrowed to float.
+    // dsparse::CenterMode name or `auto` (dsparse::resolve_scene_center). Over ALL
+    // post-outlier frames and every seed point, in double, before any narrowing.
     std::string center_mode = "none";
+    float center_auto_threshold = 20.0f;
+    // Set: the centre a run already chose (its scene_transform.json), taken as
+    // is under the name center_mode, which must then not be `auto`.
+    std::optional<std::array<double, 3>> center;
 
     // Pixel size of an image file (data/ImageProbe.h). Set: every camera trains
     // at its own image's resolution. Null: a caller with no decoders -- the
@@ -225,10 +230,13 @@ struct ParsedDataset {
     ColmapPoints3D           points;
 
     // p_train = p_raw - center, where p_raw is the frame the files came in
-    // (COLMAP's own, or nerfstudio's with applied_transform undone). Zero
-    // unless DatasetParserConfig::center_mode asked for one.
+    // (COLMAP's own, or nerfstudio's with applied_transform undone).
+    // center_mode names the statistic it is, never `auto`.
     std::array<double, 3>    center{0.0, 0.0, 0.0};
     std::string              center_mode = "none";
+
+    // Pre-applied raw frame -> stored file frame; identity except transforms.json's applied_transform.
+    std::array<double, 16>   raw_to_file{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
 
     // 1 / scale_factor of the would-be normalized frame. Computed over ALL
     // frames, before the eval_mode subset is dropped.
@@ -395,6 +403,11 @@ void train_to_normalized_inverse(const ParsedDataset& ds, double out[16]);
 // which is what both viewers navigate.
 CenterTable scene_centers(const ParsedDataset& ds);
 
+// The parse's origin over c2w [N,3,4] and the seed points: cfg.center when set,
+// else what cfg.center_mode resolves to.
+ResolvedCenter parse_center(const DatasetParserConfig& cfg, const double* c2w,
+                            int64_t n, const ColmapPoints3D& points);
+
 // eval_mode subset over N sorted frames, honouring cfg.split; identity for
 // "all". `names` are image filenames (used by eval_mode="filename").
 std::vector<int64_t> train_subset(int64_t n, const std::vector<std::string>& names,
@@ -402,6 +415,10 @@ std::vector<int64_t> train_subset(int64_t n, const std::vector<std::string>& nam
 
 // validation_fraction partition of 0..N-1 into ds.train_indices/val_indices.
 void assign_val_split(ParsedDataset& ds, float validation_fraction);
+
+// gauge.txt in `dir` (sfm/Pipeline.h writes one, and so does an E57 import):
+// what the frame is worth. Absent, both flags stay false.
+void read_gauge(const std::string& dir, ParsedDataset& ds);
 
 // Auxiliary mask/depth/normal discovery by filename convention. "" when
 // `rel_name` is empty or would leave `aux_dir`.

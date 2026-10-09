@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace gui {
 namespace automation {
@@ -31,11 +32,19 @@ void set_state_source(std::function<std::string()> f);
 // frame loop at its busy rate for the length of a script.
 bool begin_frame();
 
+// A drop the client asked for (/ui/drop), taken once after begin_frame() and
+// handed on as GLFW hands a real one; empty when none came.
+std::vector<std::string> take_drop();
+
 // After the draw data has been rendered, with the GL context current:
 // publishes the frame's item table and fills a pending screenshot request.
 void end_frame(int fb_w, int fb_h);
 
 void shutdown();
+
+// Labels the item `id` in this frame's table, for a widget that reports no label
+// to the item hooks (ImGui's combo). A no-op unless armed.
+void name_item(unsigned id, const char* label);
 
 }  // namespace automation
 }  // namespace gui

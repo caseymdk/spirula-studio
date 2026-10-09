@@ -2,7 +2,9 @@
 
 #include "app/gui/DatasetPrep.h"
 
+#include "app/LidarDataset.h"
 #include "app/gui/DatasetRecord.h"
+#include "dense/Artifact.h"
 #include "app/gui/mask/MaskLayer.h"
 #include "sfm/core/Resume.h"
 
@@ -263,9 +265,10 @@ std::vector<sam::SeedPrompt> seeds_from_clicks(const std::vector<MaskClick>& cli
 class ImagePrefetch {
 public:
     ImagePrefetch(std::vector<fs::path> files, const std::atomic<bool>& cancel,
-                  std::string gamut, std::optional<bool> is_linear)
+                  std::string gamut, std::optional<bool> is_linear,
+                  colorspace::Exposure exposure)
         : _files(std::move(files)), _cancel(cancel), _gamut(std::move(gamut)),
-          _is_linear(is_linear), _worker([this] { run(); }) {}
+          _is_linear(is_linear), _exposure(exposure), _worker([this] { run(); }) {}
     ~ImagePrefetch() {
         {
             std::lock_guard<std::mutex> lk(_mu);
@@ -310,7 +313,7 @@ private:
                 if (_cancel.load()) break;
                 Item item;
                 item.img = app::load_upright(f.string(), _gamut, _is_linear,
-                                             item.turn);
+                                             _exposure, item.turn);
                 std::unique_lock<std::mutex> lk(_mu);
                 _space.wait(lk, [this] { return _queue.size() < kDepth || _stop; });
                 if (_stop) break;
@@ -332,6 +335,7 @@ private:
     const std::atomic<bool>& _cancel;
     std::string _gamut;
     std::optional<bool> _is_linear;
+    colorspace::Exposure _exposure;
     std::deque<Item> _queue;
     std::mutex _mu;
     std::condition_variable _ready, _space;
@@ -968,7 +972,24 @@ WorkspaceState probe_workspace(const std::string& workspace,
                fs::exists(ws / "transforms.json", ec) ||
                colmap_model_here(ws) || metashape_export_here(ws);
     st.geometry = has_content(ws / "normals") || has_content(ws / "depths");
+    st.dense = spirula::dense::artifact_complete(ws.string(), true);
     st.record = fs::exists(ws / kDatasetRecordFile, ec);
+    const fs::path resume = ws / sfm::resume::kDir;
+    st.extracted = has_content(ws / "features") &&
+                   fs::exists(resume / sfm::resume::kExtractSig, ec);
+    if (st.extracted) {
+        const std::string key = sfm::resume::kSignedImages;
+        std::ifstream sig(resume / sfm::resume::kExtractSig);
+        for (std::string line; std::getline(sig, line);)
+            if (line.rfind(key, 0) == 0) st.extracted_images = line.substr(key.size());
+    }
+    st.matched = fs::exists(ws / "matches.bin", ec) &&
+                 fs::exists(resume / sfm::resume::kMatchSig, ec);
+    st.matching_part = fs::exists(resume / sfm::resume::kMatchJournal, ec);
+    app::lidar::AlignedWith aligned;
+    st.aligned = app::lidar::read_aligned_with(workspace, aligned);
+    st.aligned_clouds = aligned.clouds;
+    st.aligned_kept_frame = aligned.mode == app::lidar::AlignMode::Keep;
     return st;
 }
 
@@ -1503,6 +1524,23 @@ static bool lockstep_extraction(const PrepJob& job, const PrepInput& in, bool bu
     return builtin && job.sync_tracks;
 }
 
+// The built-in decoder names a frame by its source index; ffmpeg's fallback
+// numbers the candidates it resampled at the kept rate times the group (every
+// frame is not resampled, so there too the stem is the source index).
+static PrepCapture capture_of(const PrepJob& job, const PrepInput& in, bool builtin) {
+    const double fps = builtin ? 0.0 : (double)input_fps(job, in) * candidate_group(job, in);
+    return {in.subdir, in.path, fps, lockstep_extraction(job, in, builtin)};
+}
+
+PrepCapture video_capture(const PrepJob& job, const PrepInput& in) {
+    return capture_of(job, in, !job.force_external_decode && native_decode_reason().empty());
+}
+
+static bool same_path(const std::string& a, const std::string& b) {
+    std::error_code ec;
+    return fs::absolute(a, ec).lexically_normal() == fs::absolute(b, ec).lexically_normal();
+}
+
 bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
                                 const std::string& images, PrepResult& out,
                                 std::string& error) {
@@ -1517,13 +1555,14 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
             std::error_code ec;
             if (fs::is_directory(fs::path(images) / "cam1", ec))
                 out.per_folder_cameras = true;
-            // Kept frames of unknown provenance: the file's own rate is the
-            // built-in extractor's convention, and a wrong one is refused
-            // downstream by the gyro-against-poses check, not misused.
-            out.captures.push_back(
-                {in.subdir, in.path, 0.0,
-                 lockstep_extraction(job, in, !job.force_external_decode &&
-                                                  native_decode_reason().empty())});
+            // As the record says they were cut; with no record, as this build
+            // would cut them. A wrong rate is refused downstream by the
+            // gyro-against-poses check, not misused.
+            PrepCapture cap = video_capture(job, in);
+            for (const PrepCapture& c : job.recorded_captures)
+                if (c.subdir == in.subdir && same_path(c.path, in.path)) cap = c;
+            cap.path = in.path;
+            out.captures.push_back(cap);
             return split_packed_frames(in, images, out, error);
         }
     }
@@ -1532,7 +1571,7 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
         !job.force_external_decode && native_decode_reason().empty();
     if (want_builtin) {
         if (extract_video_builtin(job, in, images, out, error)) {
-            out.captures.push_back({in.subdir, in.path, 0.0, lockstep_extraction(job, in, true)});
+            out.captures.push_back(capture_of(job, in, true));
             return split_packed_frames(in, images, out, error);
         }
         if (_cancel.load()) return false;
@@ -1543,13 +1582,7 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
     const bool ok = in.pano360.valid() && job.pano.mode != app::Pano360Mode::Off
                         ? extract_360_ffmpeg(job, in, images, out, error)
                         : extract_video_ffmpeg(job, in, images, out, error);
-    // The stems are candidate numbers, and the candidates were resampled at
-    // the kept rate times the group -- which is the rate that times them. Every
-    // frame is not resampled, so its stems are source indices as above.
-    if (ok)
-        out.captures.push_back({in.subdir, in.path,
-                                (double)input_fps(job, in) * candidate_group(job, in),
-                                lockstep_extraction(job, in, false)});
+    if (ok) out.captures.push_back(capture_of(job, in, false));
     return ok && split_packed_frames(in, images, out, error);
 }
 
@@ -2832,7 +2865,10 @@ bool DatasetPrep::generate_masks_builtin(const PrepJob& job, const PrepInput& in
     // Encoding a 1080p mask costs about a third of what the model costs to
     // produce it, and none of it needs the GPU.
     app::WriterPool writers;
-    ImagePrefetch reader(todo_files, _cancel, job.image_gamut, job.image_is_linear);
+    colorspace::Exposure exposure;
+    colorspace::parse_exposure(job.image_exposure, exposure);
+    ImagePrefetch reader(todo_files, _cancel, job.image_gamut, job.image_is_linear,
+                         exposure);
     RateLimitedProgress progress(_prog, Stage::Masks, lmsg::noun_images_masked,
                                  _masks_tally);
     for (size_t k = 0; k < todo.size(); k++) {

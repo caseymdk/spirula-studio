@@ -6,6 +6,7 @@
 #include "app/gui/ViewportPanel.h"
 #include "i18n/Message.h"
 #include "app/gui/edit/PointsDoc.h"
+#include "dense/Generation.h"
 #include "app/gui/edit/WorldGrid.h"
 #include "i18n/catalog/Edit.h"
 #include "i18n/catalog/EditTransform.h"
@@ -38,6 +39,14 @@ void EditSession::open(std::unique_ptr<EditDoc> doc, ViewportPanel* panel) {
     }
     _opt = SelectOptions{};
     _opt.by_extent = _doc && _doc->kind() == EditDoc::Kind::Splats;
+    // The source's own format, the one "Save" can write back over.
+    _save_target = 0;
+    if (_doc)
+        for (int i = 0, n = (int)_doc->save_targets().size(); i < n; i++)
+            if (!_doc->default_save_path(i).empty()) {
+                _save_target = i;
+                break;
+            }
     // Opening in Navigate: the first thing anyone does with a model they have
     // just opened is look at it from somewhere else.
     _tool.set_id(ToolId::Navigate);
@@ -592,28 +601,7 @@ void EditSession::poll() {
         _attr_job_axis = -1;
         _cancel = false;
     }
-    if (!_save_busy.load() && _save_worker.joinable()) {
-        _save_worker.join();
-        const bool to_trainer = _train_after_save;
-        _train_after_save = false;
-        if (_save_error.empty()) {
-            if (_on_saved) _on_saved(_doc->source_path(), _save_path, _save_placement);
-            _doc->mark_saved();
-            if (_save_path == _doc->source_path() ||
-                _save_path == _doc->default_save_path(_save_target))
-                _saved_over_source = true;
-            _status = spirula::i18n::format(msg::saved_to,
-                                            {_doc->default_save_path(_save_target)});
-            _status_err = false;
-            // Last: the owner is free to end this session in answer.
-            if (to_trainer && _to_trainer)
-                _to_trainer(_save_path, trainer_dataset());
-        } else {
-            _status = spirula::i18n::format(msg::save_failed, {_save_error});
-            _status_err = true;
-        }
-        note(_status);
-    }
+    if (!_save_busy.load() && _save_worker.joinable()) take_save_result();
     if (busy()) {
         if (_panel) _panel->invalidate();
         return;
@@ -640,8 +628,13 @@ void EditSession::poll() {
 
 std::string EditSession::trainer_dataset() const {
     if (!_to_trainer || !_doc || _doc->kind() != EditDoc::Kind::Points) return {};
-    if (folder_target() < 0) return {};
+    if (folder_target() < 0) return dense_dataset();
     return static_cast<const PointsDoc*>(_doc.get())->dataset_dir();
+}
+
+std::string EditSession::dense_dataset() const {
+    if (!_doc || _doc->kind() != EditDoc::Kind::Points) return {};
+    return spirula::dense::dense_dataset_of(_doc->source_path());
 }
 
 int EditSession::folder_target() const {
@@ -704,6 +697,34 @@ void EditSession::save_to(int target, const std::string& path) {
         }
         _save_busy = false;
     });
+}
+
+void EditSession::wait_for_save() {
+    if (_save_worker.joinable()) take_save_result();
+}
+
+void EditSession::take_save_result() {
+    _save_worker.join();
+    const bool to_trainer = _train_after_save;
+    _train_after_save = false;
+    if (_save_error.empty()) {
+        if (_on_saved) _on_saved(_doc->source_path(), _save_path, _save_placement);
+        _doc->mark_saved();
+        if (_save_path == _doc->source_path() ||
+            _save_path == _doc->default_save_path(_save_target))
+            _saved_over_source = true;
+        _status = spirula::i18n::format(msg::saved_to, {_save_path});
+        _status_err = false;
+        // Last: the owner is free to end this session in answer.
+        // A dense cloud is saved inside its dataset, which is what trains.
+        const std::string dense = dense_dataset();
+        if (to_trainer && _to_trainer)
+            _to_trainer(dense.empty() ? _save_path : dense, trainer_dataset());
+    } else {
+        _status = spirula::i18n::format(msg::save_failed, {_save_error});
+        _status_err = true;
+    }
+    note(_status);
 }
 
 }  // namespace gui

@@ -30,6 +30,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "core/ColorSpace.h"
 #include "sfm/core/CameraSetup.h"
 #include "sfm/core/Sequence.h"
 #include "sfm/feature/Matcher.h"
@@ -136,6 +137,9 @@ struct SfmConfig {
     // is what the detectors and the AI models were trained on.
     std::string image_gamut = "Rec.709";
     bool image_is_linear = false;
+    // "auto" or stops, for what the detectors see; finalize() parses it.
+    std::string image_exposure;
+    colorspace::Exposure exposure;
     // "srgb" leaves point colours there (trainer: point_color_gamut Rec.709);
     // "image" writes them back in the photographs' space, the trainer's default.
     std::string point_color_space = "srgb";
@@ -195,7 +199,7 @@ struct SfmConfig {
     // held to the sensors, pairs within `sensor_pair_radius` metres of GPS.
     bool sensor_verify = true;
     bool sensor_map = true;
-    bool sensor_pairs = true;
+    bool sensor_pairs = false;   // on request only: extra matching, see src/sfm/README.md
     // An equirect camera declares camera -Y as up (a horizon-levelled stitch);
     // refused per solve when the images disagree (ExifGpsPriors).
     bool level_erp = true;
@@ -227,6 +231,11 @@ struct SfmConfig {
     // workspace -- the feature files it wrote, the pair list it chose, the pairs
     // verification finished (sfm/core/Resume.h). Off starts every stage over.
     bool reuse = true;
+    // Per stage, with `reuse` on: `keep` takes features/ or matches.bin as they
+    // are, whatever made them, and records them as made with these settings;
+    // `redo` makes them again even when they are current.
+    std::string reuse_features = "auto";
+    std::string reuse_matches = "auto";
 
     // Runtime.
     int threads = 0;           // host worker pools; 0 = hardware_concurrency
@@ -371,6 +380,8 @@ struct SfmConfig {
       "Rec.709|ACES2065-1|ACEScg|Rec.2020|AdobeRGB|DCI-P3", image_gamut)                           \
     F(image_is_linear, "image-linear", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "colour", 0, 0, "", \
       image_linear)                                                                                \
+    F(image_exposure, "image-exposure", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "colour", 0, 0,    \
+      "", image_exposure)                                                                          \
     F(point_color_space, "point-color", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "colour", 0, 0,    \
       "srgb|image", point_color)                                                                   \
     /* ---- camera ---- */                                                                         \
@@ -524,6 +535,10 @@ struct SfmConfig {
       retri_scale)                                                                                 \
     F(mapper.merge_tracks, "merge-tracks", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0, 0, "", \
       merge_tracks)                                                                                \
+    F(mapper.seam_weld_frac, "seam-weld", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0, 1, "",  \
+      seam_weld)                                                                                   \
+    F(mapper.gps_scale_band, "gps-scale-band", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0, 1, \
+      "", gps_scale_band)                                                                          \
     F(mapper.rank_by_visibility, "rank-by-visibility", CMD_AUTO | CMD_MAP, Tier::Advanced,         \
       "mapper", 0, 0, "", rank_by_visibility)                                                      \
     F(mapper.seed_blocking, "seed-blocking", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0, 0,   \
@@ -642,6 +657,10 @@ struct SfmConfig {
     F(feature_dir, "features", CMD_MAP, Tier::Advanced, "input", 0, 0, "", feature_dir)            \
     F(resume, "resume", CMD_MAP, Tier::Advanced, "input", 0, 0, "", resume)                        \
     F(reuse, "resume", CMD_AUTO, Tier::Basic, "input", 0, 0, "", auto_resume)                      \
+    F(reuse_features, "reuse-features", CMD_AUTO, Tier::Advanced, "input", 0, 0, "auto|keep|redo", \
+      reuse_features)                                                                              \
+    F(reuse_matches, "reuse-matches", CMD_AUTO, Tier::Advanced, "input", 0, 0, "auto|keep|redo",   \
+      reuse_matches)                                                                               \
     F(check, "check", CMD_MAP, Tier::Advanced, "input", 0, 0, "", check)                           \
     /* ---- runtime ---- */                                                                        \
     F(threads, "threads", CMD_AUTO | CMD_MATCH | CMD_MAP, Tier::Advanced, "runtime", 0, 4096, "",  \

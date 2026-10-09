@@ -78,6 +78,9 @@ public:
     // Save over what the document came from, which is what the panel's Save
     // button and the quit dialog both mean.
     void save_in_place();
+    // Block until the save in flight ends and take in how it went, as poll()
+    // would: leaving the editor must not outrun its own save.
+    void wait_for_save();
     // Ask for a place to save, the way the panel's "Save a copy" does.
     void ask_save_copy();
     bool can_save_in_place() const;
@@ -346,8 +349,11 @@ private:
     bool _ask_train = false;
     // The dataset the trainer button would open, "" when there is none.
     std::string trainer_dataset() const;
+    // The dataset whose dense cloud is being edited, or "".
+    std::string dense_dataset() const;
     int folder_target() const;
     void draw_trainer_button(float full);
+    void take_save_result();
     std::function<void(const std::string&, const std::string&, const spirula::Sim3&)> _on_saved;
     spirula::Sim3 _save_placement;
     std::vector<std::string> _log;

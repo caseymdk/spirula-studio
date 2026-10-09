@@ -802,6 +802,57 @@ SS_MSG(image_linear_help,
        "закодированными"),
     TR("Girdi görüntülerini ekran kodlu değil, doğrusal ışık olarak ele al"));
 
+SS_MSG(image_exposure_help,
+    EN("Brighten what the detectors see, in linear light, without touching the "
+       "files: auto lifts each image whose median is darker than a typical "
+       "photograph's, or give a number of stops (2, -1). Point colours and the "
+       "training images keep the files' own values"),
+    JA("ファイルを変えずに、検出器に渡す画像だけをリニア光で明るくする。auto は"
+       "中央値が一般的な写真より暗い画像をそれぞれ持ち上げ、数値なら段数（2、-1）。"
+       "点群の色と学習用画像はファイル本来の値のまま"),
+    ZH_HANS("在线性光中只调亮检测器看到的图像，不改动文件：auto 会把中位亮度低于"
+            "普通照片的每张图像提亮，也可给出档数（2、-1）。点云颜色和训练图像保持"
+            "文件原值"),
+    ZH_HANT("在線性光中只調亮偵測器看到的影像，不改動檔案：auto 會把中位亮度低於"
+            "一般照片的每張影像提亮，也可給出檔數（2、-1）。點雲顏色與訓練影像維持"
+            "檔案原值"),
+    KO("파일은 그대로 두고 검출기가 보는 이미지만 선형 광에서 밝게 합니다. auto 는 "
+       "중앙값이 일반 사진보다 어두운 이미지를 각각 끌어올리고, 숫자는 스톱 "
+       "수입니다(2, -1). 점 구름 색과 학습 이미지는 파일 본래 값을 유지합니다"),
+    DE("Hellt in linearem Licht auf, was die Detektoren sehen, ohne die Dateien "
+       "zu ändern: auto hebt jedes Bild an, dessen Median dunkler ist als bei "
+       "einem typischen Foto, oder eine Zahl von Blendenstufen (2, -1). "
+       "Punktfarben und Trainingsbilder behalten die Werte der Dateien"),
+    FR("Éclaircit en lumière linéaire ce que voient les détecteurs, sans toucher "
+       "aux fichiers : auto relève chaque image dont la médiane est plus sombre "
+       "que celle d'une photo typique, ou indiquez un nombre de diaphs (2, -1). "
+       "Les couleurs des points et les images d'entraînement gardent les valeurs "
+       "des fichiers"),
+    ES("Aclara en luz lineal lo que ven los detectores, sin tocar los archivos: "
+       "auto levanta cada imagen cuya mediana es más oscura que la de una foto "
+       "típica, o indique un número de pasos (2, -1). Los colores de los puntos y "
+       "las imágenes de entrenamiento conservan los valores de los archivos"),
+    PT("Clareia em luz linear o que os detectores veem, sem mexer nos arquivos: "
+       "auto ergue cada imagem cuja mediana é mais escura que a de uma foto "
+       "típica, ou indique um número de pontos (2, -1). As cores dos pontos e as "
+       "imagens de treino mantêm os valores dos arquivos"),
+    IT("Schiarisce in luce lineare ciò che vedono i rilevatori, senza toccare i "
+       "file: auto solleva ogni immagine la cui mediana è più scura di quella di "
+       "una foto tipica, oppure indica un numero di stop (2, -1). I colori dei "
+       "punti e le immagini di addestramento mantengono i valori dei file"),
+    NL("Maakt in lineair licht lichter wat de detectoren zien, zonder de "
+       "bestanden te wijzigen: auto tilt elk beeld op waarvan de mediaan donkerder "
+       "is dan bij een gewone foto, of geef een aantal stops (2, -1). Puntkleuren "
+       "en trainingsbeelden houden de waarden van de bestanden"),
+    RU("Осветляет в линейном свете то, что видят детекторы, не трогая файлы: auto "
+       "поднимает каждое изображение, медиана которого темнее, чем у обычной "
+       "фотографии, либо укажите число ступеней (2, -1). Цвета точек и обучающие "
+       "изображения сохраняют значения файлов"),
+    TR("Algılayıcıların gördüğünü dosyalara dokunmadan doğrusal ışıkta aydınlatır: "
+       "auto, medyanı tipik bir fotoğrafınkinden koyu olan her görüntüyü "
+       "yükseltir; ya da bir durak sayısı verin (2, -1). Nokta renkleri ve eğitim "
+       "görüntüleri dosyaların kendi değerlerini korur"));
+
 SS_MSG(point_color_help,
     EN("Colour space the sparse point cloud is written in. image writes the "
        "points in the same space as the photographs, which the trainer assumes "
@@ -2255,6 +2306,73 @@ SS_MSG(merge_tracks_help,
        "признаком"),
     TR("Bir karşılığın aynı öznitelik dediği iki 3B noktayı kaynaştır"));
 
+SS_MSG(seam_weld_help,
+    EN("Weld open seams: a verified pair of 100+ matches that the finished model explains "
+       "below this fraction, and whose images share almost no neighbours, is fused and "
+       "refined; 0 to skip"),
+    JA("開いた継ぎ目を結合します。検証済みの対応が 100 以上あり、完成したモデルがこの割合"
+       "未満しか説明できず、共通の近傍画像がほとんどない画像対を融合して再調整します。0 で"
+       "省略"),
+    ZH_HANS("合并开放的接缝：已验证匹配 100 个以上、而完成的模型只能解释其中低于此比例、且两"
+            "图几乎没有共同邻近图像的图像对，将被融合并重新优化；0 表示跳过"),
+    ZH_HANT("合併開放的接縫：已驗證匹配 100 個以上、而完成的模型只能解釋其中低於此比例、且兩"
+            "圖幾乎沒有共同鄰近影像的影像對，將被融合並重新最佳化；0 表示略過"),
+    KO("열린 이음매를 결합합니다. 검증된 매칭이 100개 이상인데 완성된 모델이 이 비율 "
+       "미만만 설명하고 공통 이웃 이미지가 거의 없는 이미지 쌍을 융합해 다시 최적화합니다. "
+       "0이면 건너뜁니다"),
+    DE("Offene Nähte verschweißen: ein geprüftes Paar mit 100+ Treffern, das das fertige "
+       "Modell unter diesem Anteil erklärt und dessen Bilder kaum gemeinsame Nachbarn haben, "
+       "wird verschmolzen und neu ausgeglichen; 0 überspringt"),
+    FR("Souder les coutures ouvertes : une paire vérifiée de 100+ correspondances que le "
+       "modèle final explique sous cette fraction, et dont les images n'ont presque aucun "
+       "voisin commun, est fusionnée et réajustée ; 0 pour sauter"),
+    ES("Soldar costuras abiertas: un par verificado de 100+ correspondencias que el modelo "
+       "final explica por debajo de esta fracción, y cuyas imágenes casi no comparten "
+       "vecinas, se funde y se reajusta; 0 para saltarlo"),
+    PT("Soldar costuras abertas: um par verificado com 100+ correspondências que o modelo "
+       "final explica abaixo desta fração, e cujas imagens quase não compartilham vizinhas, "
+       "é fundido e reajustado; 0 para pular"),
+    IT("Saldare le cuciture aperte: una coppia verificata con 100+ corrispondenze che il "
+       "modello finale spiega sotto questa frazione, e le cui immagini non hanno quasi vicine "
+       "in comune, viene fusa e riottimizzata; 0 per saltare"),
+    NL("Open naden lassen: een geverifieerd paar met 100+ overeenkomsten dat het eindmodel "
+       "onder deze fractie verklaart en waarvan de beelden bijna geen gemeenschappelijke "
+       "buren hebben, wordt samengesmolten en opnieuw vereffend; 0 om over te slaan"),
+    RU("Сваривать открытые швы: проверенную пару со 100+ соответствиями, которую итоговая "
+       "модель объясняет меньше чем на эту долю и у снимков которой почти нет общих соседей, "
+       "сливают и уточняют заново; 0 -- пропустить"),
+    TR("Açık dikişleri kaynat: son modelin bu oranın altında açıkladığı ve görüntülerinin "
+       "neredeyse hiç ortak komşusu olmadığı, 100+ eşleşmeli doğrulanmış çift kaynaştırılır "
+       "ve yeniden ayarlanır; atlamak için 0"));
+
+SS_MSG(gps_scale_band_help,
+    EN("Check the growing chain's scale against the GPS over 60-150 m of track and request a "
+       "bundle adjustment when a block has drifted; 0 to skip"),
+    JA("成長中の区間の縮尺を 60〜150 m の軌跡で GPS と照合し、ブロックがずれていたらバンドル"
+       "調整を要求します。0 で省略"),
+    ZH_HANS("在 60–150 米轨迹上将正在增长的链段尺度与 GPS 对照，区块漂移时请求进行"
+            "光束法平差；0 表示跳过"),
+    ZH_HANT("在 60–150 公尺軌跡上將正在增長的鏈段尺度與 GPS 對照，區塊漂移時請求進行"
+            "光束法平差；0 表示略過"),
+    KO("성장 중인 구간의 축척을 60~150 m 궤적에서 GPS와 대조하고, 블록이 어긋나면 "
+       "번들 조정을 요청합니다. 0이면 건너뜁니다"),
+    DE("Den Maßstab der wachsenden Kette über 60-150 m Strecke mit dem GPS vergleichen und bei "
+       "einem abgedrifteten Block einen Bündelausgleich anfordern; 0 überspringt"),
+    FR("Comparer l'échelle de la chaîne en croissance au GPS sur 60 à 150 m de trajet et "
+       "demander un ajustement de faisceaux quand un bloc a dérivé ; 0 pour sauter"),
+    ES("Comparar la escala de la cadena en crecimiento con el GPS sobre 60-150 m de recorrido y "
+       "solicitar un ajuste de haces cuando un bloque haya derivado; 0 para saltarlo"),
+    PT("Comparar a escala da cadeia em crescimento com o GPS em 60-150 m de percurso e "
+       "solicitar um ajuste de feixes quando um bloco tiver derivado; 0 para pular"),
+    IT("Confrontare la scala della catena in crescita con il GPS su 60-150 m di percorso e "
+       "richiedere un bundle adjustment quando un blocco è derivato; 0 per saltare"),
+    NL("De schaal van de groeiende keten over 60-150 m spoor met het GPS vergelijken en een "
+       "bundelaanpassing aanvragen wanneer een blok is verlopen; 0 om over te slaan"),
+    RU("Сверять масштаб растущей цепочки с GPS на 60-150 м пути и запрашивать "
+       "уточнение при уплывшем блоке; 0 -- пропустить"),
+    TR("Büyüyen zincirin ölçeğini 60-150 m iz boyunca GPS ile karşılaştır ve bir blok "
+       "kaydığında demet dengelemesi iste; atlamak için 0"));
+
 SS_MSG(rank_by_visibility_help,
     EN("Rank the next image by how its visible structure spreads over the frame, "
        "not by count"),
@@ -3572,6 +3690,91 @@ SS_MSG(auto_resume_help,
        "вывода от прерванного запуска с теми же настройками"),
     TR("Aynı ayarlarla yarıda kalan bir çalıştırmanın çıktı klasöründe bıraktığı "
        "öznitelikleri, çift listesini ve doğrulanmış çiftleri devral"));
+
+SS_MSG(reuse_features_help,
+    EN("The features already in the output folder: auto reuses them while the "
+       "settings that made them read the same, keep reuses them whatever made "
+       "them, redo extracts them again"),
+    JA("出力フォルダにすでにある特徴点の扱い：auto は作ったときの設定が同じなら使い、"
+       "keep は何で作られていても使い、redo は抽出し直します"),
+    ZH_HANS("输出文件夹里已有的特征：auto 在做它们的设置不变时沿用，keep 不论用什么做"
+            "的都沿用，redo 重新提取"),
+    ZH_HANT("輸出資料夾裡已有的特徵：auto 在做它們的設定不變時沿用，keep 不論用什麼做"
+            "的都沿用，redo 重新提取"),
+    KO("출력 폴더에 이미 있는 특징점: auto는 만든 설정이 같으면 다시 쓰고, keep은 "
+       "무엇으로 만들었든 다시 쓰며, redo는 다시 추출합니다"),
+    DE("Die Merkmale im Ausgabeordner: auto verwendet sie weiter, solange die "
+       "Einstellungen, die sie erzeugt haben, gleich lauten, keep verwendet sie "
+       "unabhängig davon weiter, redo extrahiert sie neu"),
+    FR("Les points déjà dans le dossier de sortie : auto les réutilise tant que "
+       "les réglages qui les ont faits sont les mêmes, keep les réutilise quoi "
+       "qui les ait faits, redo les extrait à nouveau"),
+    ES("Los rasgos que ya están en la carpeta de salida: auto los reutiliza "
+       "mientras los ajustes que los hicieron sean los mismos, keep los reutiliza "
+       "los haya hecho lo que sea, redo los vuelve a extraer"),
+    PT("Os pontos já na pasta de saída: auto reutiliza-os enquanto as definições "
+       "que os fizeram forem as mesmas, keep reutiliza-os seja o que for que os "
+       "fez, redo extrai-os de novo"),
+    IT("I punti già nella cartella di uscita: auto li riutilizza finché le "
+       "impostazioni che li hanno fatti restano le stesse, keep li riutilizza "
+       "comunque siano stati fatti, redo li estrae di nuovo"),
+    NL("De kenmerken die al in de uitvoermap staan: auto hergebruikt ze zolang de "
+       "instellingen waarmee ze gemaakt zijn gelijk blijven, keep hergebruikt ze "
+       "hoe ze ook gemaakt zijn, redo extraheert ze opnieuw"),
+    RU("Признаки, уже лежащие в папке вывода: auto использует их, пока "
+       "настройки, с которыми они сделаны, те же, keep использует их, чем бы они "
+       "ни были сделаны, redo извлекает заново"),
+    TR("Çıktı klasöründe zaten olan öznitelikler: auto onları yapan ayarlar aynı "
+       "kaldıkça yeniden kullanır, keep neyle yapılmış olursa olsun yeniden "
+       "kullanır, redo yeniden çıkarır"));
+
+SS_MSG(reuse_matches_help,
+    EN("The verified pairs already in matches.bin: auto reuses them while the "
+       "settings and the features that made them are the same, keep reuses them "
+       "over the same unchanged features whatever settings made them, redo "
+       "matches again"),
+    JA("matches.bin にすでにある検証済みペアの扱い：auto は作ったときの設定と特徴点が"
+       "同じなら使い、keep は特徴点が変わっていなければ設定にかかわらず使い、redo は"
+       "照合し直します"),
+    ZH_HANS("matches.bin 里已有的已验证像对：auto 在做它们的设置和特征不变时沿用，"
+            "keep 只要特征没变、不论设置都沿用，redo 重新匹配"),
+    ZH_HANT("matches.bin 裡已有的已驗證影像對：auto 在做它們的設定和特徵不變時沿用，"
+            "keep 只要特徵沒變、不論設定都沿用，redo 重新比對"),
+    KO("matches.bin에 이미 있는 검증된 쌍: auto는 만든 설정과 특징점이 같으면 다시 "
+       "쓰고, keep은 특징점이 그대로면 설정과 상관없이 다시 쓰며, redo는 다시 "
+       "정합합니다"),
+    DE("Die geprüften Paare in matches.bin: auto verwendet sie weiter, solange "
+       "Einstellungen und Merkmale, aus denen sie entstanden, gleich sind, keep "
+       "verwendet sie über denselben unveränderten Merkmalen unabhängig von den "
+       "Einstellungen weiter, redo ordnet neu zu"),
+    FR("Les paires vérifiées déjà dans matches.bin : auto les réutilise tant que "
+       "les réglages et les points qui les ont faites sont les mêmes, keep les "
+       "réutilise sur les mêmes points inchangés quels que soient les réglages, "
+       "redo apparie à nouveau"),
+    ES("Los pares verificados que ya están en matches.bin: auto los reutiliza "
+       "mientras los ajustes y los rasgos que los hicieron sean los mismos, keep "
+       "los reutiliza sobre los mismos rasgos sin cambios sean cuales sean los "
+       "ajustes, redo vuelve a emparejar"),
+    PT("Os pares verificados já em matches.bin: auto reutiliza-os enquanto as "
+       "definições e os pontos que os fizeram forem os mesmos, keep reutiliza-os "
+       "sobre os mesmos pontos inalterados sejam quais forem as definições, redo "
+       "emparelha de novo"),
+    IT("Le coppie verificate già in matches.bin: auto le riutilizza finché "
+       "impostazioni e punti che le hanno fatte restano gli stessi, keep le "
+       "riutilizza sugli stessi punti invariati qualunque siano le impostazioni, "
+       "redo confronta di nuovo"),
+    NL("De geverifieerde paren die al in matches.bin staan: auto hergebruikt ze "
+       "zolang de instellingen en kenmerken waarmee ze gemaakt zijn gelijk "
+       "blijven, keep hergebruikt ze over dezelfde ongewijzigde kenmerken wat de "
+       "instellingen ook zijn, redo koppelt opnieuw"),
+    RU("Проверенные пары, уже лежащие в matches.bin: auto использует их, пока "
+       "настройки и признаки, по которым они сделаны, те же, keep использует их "
+       "при тех же неизменных признаках при любых настройках, redo сопоставляет "
+       "заново"),
+    TR("matches.bin'de zaten olan doğrulanmış çiftler: auto onları yapan ayarlar "
+       "ve öznitelikler aynı kaldıkça yeniden kullanır, keep öznitelikler "
+       "değişmediyse ayarlar ne olursa olsun yeniden kullanır, redo yeniden "
+       "eşleştirir"));
 
 SS_MSG(check_help,
     EN("With --resume: report how far each model agrees with the two-view "

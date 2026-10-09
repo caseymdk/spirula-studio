@@ -24,7 +24,7 @@
 #include "sfm/ba/Priors.h"
 #include "sfm/ba/Problem.h"
 #include "core/Env.h"
-#include "sfm/core/HostMemory.h"
+#include "core/HostMemory.h"
 #include "sfm/core/Cancel.h"
 #include "sfm/core/Log.h"
 
@@ -61,6 +61,7 @@ public:
 
         stats_.vram_mb = allocatedMB();
         stats_.solver = useCG_ ? (haveFallback_ ? "cg+fallback" : "cg") : "dense";
+        stats_.jac32 = jac32_;
         if (opt_.verbose)
             sfm::slog::diag(sfm::slog::Tag::Map,
                             "[cpu] n_dim = %u, solver = %s, threads = %d, RAM = %.1f MB",
@@ -333,7 +334,7 @@ private:
     }
 
     static double defaultBudgetMB() {
-        const size_t ram = sfm::physicalRamBytes();
+        const size_t ram = spirula::physicalRamBytes();
         // Half the machine, not nine tenths of it: unlike a GPU heap this is
         // shared with the rest of the pipeline (features, matches, the
         // reconstruction) and with the page cache.
@@ -344,7 +345,7 @@ private:
         const double no = (double)nObs_, np = (double)nPts_, ni = (double)nImg_, n = (double)n_;
         const double spd = lapackEnabled() ? 2 : 1;  // a LAPACK factors out of place
         double b = 0;
-        b += ((double)P_.jc_total + 8 * no) * 8;              // Jc, Jp, res
+        b += ((double)P_.jc_total + 6 * no) * (jac32_ ? 4 : 8) + 2 * no * 8;  // Jc, Jp, res
         b += (9 + 9 + 3 + 3) * np * 8;                        // App, W, Bp, Bp0
         b += (P_.pose_dim + P_.exts.size() + P_.total_intr + 3 * np) * 8;  // parameter backups
         b += 4 * no + 4 * (ni + 1) + 12 * (no / 1024 + ni);   // obs-by-image CSR + chunks
@@ -414,12 +415,22 @@ private:
         if (useCG_)
             haveFallback_ = opt_.cg_fallback == CgFallback::On ||
                             (opt_.cg_fallback == CgFallback::Auto && bothMB <= 0.5 * budget);
+        // As the device solver does (Solver.h): Jc and Jp at fp32 when the solve
+        // would not fit the budget otherwise, or SS_SFM_BA_JAC32 says.
+        const char* jacEnv = spirula::env("SFM_BA_JAC32");
+        const double fullMB = (useCG_ ? cgMB : denseMB) + (haveFallback_ ? denseMB : 0);
+        jac32_ = jacEnv ? jacEnv[0] == '1' : fullMB > budget;
+        if (jac32_) {
+            cgMB = estimateMB(false, true);
+            bothMB = estimateMB(true, true);
+        }
+        const double denseNowMB = jac32_ ? estimateMB(true, false) : denseMB;
 
         if (opt_.verbose)
             sfm::slog::diag(sfm::slog::Tag::Map,
                        "[cpu] RAM estimates: dense %.0f MB, cg %.0f MB (budget %.0f MB)",
                        denseMB, cgMB, budget);
-        const double needMB = (useCG_ ? cgMB : denseMB) + (haveFallback_ ? denseMB : 0);
+        const double needMB = (useCG_ ? cgMB : denseNowMB) + (haveFallback_ ? denseNowMB : 0);
         if (needMB > budget) {
             if (opt_.over_budget_throws) throw BAOverBudget(needMB, budget);
             sfm::slog::diag(sfm::slog::Tag::Map,
@@ -449,8 +460,13 @@ private:
     }
 
     void allocate() {
-        Jc_.assign(P_.jc_total, 0.0);
-        Jp_.assign(6 * (size_t)nObs_, 0.0);
+        if (jac32_) {
+            Jc32_.assign(P_.jc_total, 0.0f);
+            Jp32_.assign(6 * (size_t)nObs_, 0.0f);
+        } else {
+            Jc_.assign(P_.jc_total, 0.0);
+            Jp_.assign(6 * (size_t)nObs_, 0.0);
+        }
         res_.assign(2 * (size_t)nObs_, 0.0);
         App_.assign(9 * (size_t)nPts_, 0.0);
         W_.assign(9 * (size_t)nPts_, 0.0);
@@ -517,7 +533,7 @@ private:
                     cgGrp_.capacity()) *
                    8;
         b += tcA_.bytes() + (tcP_.capacity() + tcY_.capacity()) * 8 +
-             (tcEnt_.capacity() + tcKey_.capacity()) * 4;
+             (tcEnt_.capacity() + tcKey_.capacity() + Jc32_.capacity() + Jp32_.capacity()) * 4;
         b += S_.bytes() + (P_.cam_obs.capacity() + P_.cam_obs_ranges.capacity() +
                            P_.cam_chunks.capacity() + P_.prec_blocks.capacity()) * 4;
         return (double)b / (1024.0 * 1024.0);
@@ -609,7 +625,8 @@ private:
             const uint32_t dof = imgCols(a, cols);
             for (uint32_t t = P_.cam_obs_ranges[a]; t < P_.cam_obs_ranges[a + 1]; t++) {
                 const uint32_t o = P_.cam_obs[t];
-                const double* J = &Jc_[P_.jc_off[o]];
+                double J_b[2 * kMaxCamDof];
+                const double* J = jcRow(o, J_b);
                 const double r0 = res_[2 * (size_t)o], r1 = res_[2 * (size_t)o + 1];
                 for (uint32_t r = 0; r < dof; r++) {
                     const double v = J[r] * r0 + J[dof + r] * r1;
@@ -645,15 +662,15 @@ private:
             pool_->run(nt, nthreads_, [&](int t, int) {
                 int64_t lo, hi;
                 taskRange(nPts_, nt, t, lo, hi);
-                double jcf[2 * kMaxCamDof], jpf[6], r[2];
+                double jcf[2 * kMaxCamDof], jpf[6], r[2], jcl[2 * kMaxCamDof], jpl[6];
                 for (int64_t p = lo; p < hi; p++) {
                     double App[9] = {}, Bp[3] = {};
                     for (uint32_t o = P_.obs_ranges[p]; o < P_.obs_ranges[p + 1]; o++) {
                         const uint32_t img = P_.obs_image[o];
                         const uint32_t dofw = dof_[img], ne = efree_[img], gz = gz_[img];
                         const uint32_t emask = emask_[img];
-                        double* jc = &Jc_[P_.jc_off[o]];
-                        double* jp = &Jp_[6 * (size_t)o];
+                        double* jc = jac32_ ? jcl : &Jc_[P_.jc_off[o]];
+                        double* jp = jac32_ ? jpl : &Jp_[6 * (size_t)o];
                         const double* pose = &P_.poses[6 * (size_t)frame_[img]];
                         withModel(model_[img], [&](auto M) {
                             using MT = decltype(M);
@@ -684,6 +701,12 @@ private:
                             r[0] *= sw;
                             r[1] *= sw;
                         });
+                        if (jac32_) {  // rounded before the point blocks see them
+                            float* fc = &Jc32_[P_.jc_off[o]];
+                            float* fp = &Jp32_[6 * (size_t)o];
+                            for (uint32_t k = 0; k < 2 * dofw; k++) jc[k] = fc[k] = (float)jc[k];
+                            for (int k = 0; k < 6; k++) jp[k] = fp[k] = (float)jp[k];
+                        }
                         res_[2 * (size_t)o] = r[0];
                         res_[2 * (size_t)o + 1] = r[1];
                         for (int i = 0; i < 3; i++) {
@@ -787,15 +810,18 @@ private:
                     const uint32_t oi = P_.cam_obs[t];
                     const uint32_t p = P_.obs_point[oi];
                     const double* Wp = &W_[9 * (size_t)p];
-                    const double* Jpi = &Jp_[6 * (size_t)oi];
-                    const double* Jci = &Jc_[P_.jc_off[oi]];
+                    double Jpi_b[6];
+                    const double* Jpi = jpRow(oi, Jpi_b);
+                    double Jci_b[2 * kMaxCamDof];
+                    const double* Jci = jcRow(oi, Jci_b);
                     double Y[6];
                     for (int row = 0; row < 2; row++)
                         for (int j = 0; j < 3; j++)
                             Y[3 * row + j] = Jpi[3 * row] * Wp[j] + Jpi[3 * row + 1] * Wp[3 + j] +
                                              Jpi[3 * row + 2] * Wp[6 + j];
                     for (uint32_t oj = P_.obs_ranges[p]; oj <= oi; oj++) {
-                        const double* Jpj = &Jp_[6 * (size_t)oj];
+                        double Jpj_b[6];
+                        const double* Jpj = jpRow(oj, Jpj_b);
                         const double q00 = Y[0] * Jpj[0] + Y[1] * Jpj[1] + Y[2] * Jpj[2];
                         const double q01 = Y[0] * Jpj[3] + Y[1] * Jpj[4] + Y[2] * Jpj[5];
                         const double q10 = Y[3] * Jpj[0] + Y[4] * Jpj[1] + Y[5] * Jpj[2];
@@ -825,7 +851,8 @@ private:
                         }
                         const uint32_t b = P_.obs_image[oj];
                         const uint32_t dofj = dof_[b];
-                        const double* Jcj = &Jc_[P_.jc_off[oj]];
+                        double Jcj_b[2 * kMaxCamDof];
+                        const double* Jcj = jcRow(oj, Jcj_b);
                         uint32_t colsB[kMaxCamDof];
                         imgCols(b, colsB);
                         // Track images ascend, so frame(b) <= frame(a): two
@@ -975,8 +1002,10 @@ private:
                 std::fill(gacc, gacc + dof, 0.0);
                 for (uint32_t t = P_.cam_obs_ranges[img]; t < P_.cam_obs_ranges[img + 1]; t++) {
                     const uint32_t o = P_.cam_obs[t], p = P_.obs_point[o];
-                    const double* Jc = &Jc_[P_.jc_off[o]];
-                    const double* Jp = &Jp_[6 * (size_t)o];
+                    double Jc_b[2 * kMaxCamDof];
+                    const double* Jc = jcRow(o, Jc_b);
+                    double Jp_b[6];
+                    const double* Jp = jpRow(o, Jp_b);
                     const double* Wp = &W_[9 * (size_t)p];
                     const double* Bp = &Bp_[3 * (size_t)p];
                     double Y[6];
@@ -1159,8 +1188,10 @@ private:
         for (; o < end && frame_[P_.obs_image[o]] / tcK_ == c; o++) {
             const uint32_t img = P_.obs_image[o], dof = dof_[img];
             const double* Pf = &tcP_[42 * (size_t)frame_[img]];
-            const double* Jc = &Jc_[P_.jc_off[o]];
-            const double* Jp = &Jp_[6 * (size_t)o];
+            double Jc_b[2 * kMaxCamDof];
+            const double* Jc = jcRow(o, Jc_b);
+            double Jp_b[6];
+            const double* Jp = jpRow(o, Jp_b);
             for (int i = 0; i < 7; i++) {
                 double q0 = 0, q1 = 0;
                 for (int a = 0; a < 6; a++) {
@@ -1271,8 +1302,10 @@ private:
                 double u0 = 0, u1 = 0, u2 = 0;
                 for (uint32_t o = P_.obs_ranges[p]; o < P_.obs_ranges[p + 1]; o++) {
                     const uint32_t img = P_.obs_image[o];
-                    const double* Jc = &Jc_[P_.jc_off[o]];
-                    const double* Jp = &Jp_[6 * (size_t)o];
+                    double Jc_b[2 * kMaxCamDof];
+                    const double* Jc = jcRow(o, Jc_b);
+                    double Jp_b[6];
+                    const double* Jp = jpRow(o, Jp_b);
                     const uint32_t dof = imgCols(img, cols);
                     double d0 = 0, d1 = 0;
                     for (uint32_t a = 0; a < dof; a++) {
@@ -1326,8 +1359,10 @@ private:
                 std::fill(acc, acc + dof, 0.0);
                 for (uint32_t t = P_.cam_obs_ranges[img]; t < P_.cam_obs_ranges[img + 1]; t++) {
                     const uint32_t o = P_.cam_obs[t], p = P_.obs_point[o];
-                    const double* Jc = &Jc_[P_.jc_off[o]];
-                    const double* Jp = &Jp_[6 * (size_t)o];
+                    double Jc_b[2 * kMaxCamDof];
+                    const double* Jc = jcRow(o, Jc_b);
+                    double Jp_b[6];
+                    const double* Jp = jpRow(o, Jp_b);
                     const double* v = &cgV_[3 * (size_t)p];
                     const double d0 = Jp[0] * v[0] + Jp[1] * v[1] + Jp[2] * v[2];
                     const double d1 = Jp[3] * v[0] + Jp[4] * v[1] + Jp[5] * v[2];
@@ -1433,8 +1468,10 @@ private:
                 double* Bp = &Bp_[3 * (size_t)p];
                 for (uint32_t o = P_.obs_ranges[p]; o < P_.obs_ranges[p + 1]; o++) {
                     const uint32_t img = P_.obs_image[o];
-                    const double* Jc = &Jc_[P_.jc_off[o]];
-                    const double* Jp = &Jp_[6 * (size_t)o];
+                    double Jc_b[2 * kMaxCamDof];
+                    const double* Jc = jcRow(o, Jc_b);
+                    double Jp_b[6];
+                    const double* Jp = jpRow(o, Jp_b);
                     const uint32_t dof = imgCols(img, cols);
                     double d0 = 0, d1 = 0;
                     for (uint32_t a = 0; a < dof; a++) {
@@ -1502,6 +1539,21 @@ private:
     uint32_t cgMaxit_ = 100, cgIters_ = 0;
 
     std::vector<double> Jc_, Jp_, res_, App_, W_, Bp_, Bp0_, g_;
+    std::vector<float> Jc32_, Jp32_;  // instead of Jc_ / Jp_ when jac32_
+    bool jac32_ = false;
+    // Observation o's Jc / Jp rows: the stored ones, or decoded into `buf`.
+    const double* jcRow(uint32_t o, double* buf) const {
+        if (!jac32_) return &Jc_[P_.jc_off[o]];
+        const float* f = &Jc32_[P_.jc_off[o]];
+        for (uint32_t k = 0, n = 2 * dof_[P_.obs_image[o]]; k < n; k++) buf[k] = f[k];
+        return buf;
+    }
+    const double* jpRow(uint32_t o, double* buf) const {
+        if (!jac32_) return &Jp_[6 * (size_t)o];
+        const float* f = &Jp32_[6 * (size_t)o];
+        for (int k = 0; k < 6; k++) buf[k] = f[k];
+        return buf;
+    }
     std::vector<double> gfull_;  // gradientConverged's d cost / d column
     double gptMax_ = 0;
     std::vector<double> poses0_, exts0_, intr0_, points0_;

@@ -16,8 +16,8 @@ namespace gui {
 // In the workspace root, dotted: no parser looks for it.
 inline constexpr const char* kDatasetRecordFile = ".spirula-dataset.json";
 
-enum class Step { Frames, Masks, Model, Geometry };
-inline constexpr int kNumSteps = 4;
+enum class Step { Frames, Masks, Model, Dense, Geometry };
+inline constexpr int kNumSteps = 5;
 
 // One setting a step's output depends on. `scope` is what it applies to -- an
 // input, a camera folder -- and empty for the whole dataset. `value` is
@@ -41,6 +41,9 @@ struct StepRecord {
     StepFields fields;
     // Geometry: the kinds of map it finished, "normal" / "depth".
     std::vector<std::string> made;
+    // Frames: the videos they were cut from. Not a field: how the stems were
+    // numbered follows from the fields, it does not decide a reuse.
+    std::vector<PrepCapture> captures;
 };
 
 struct DatasetRecord {

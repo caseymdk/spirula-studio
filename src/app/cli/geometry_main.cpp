@@ -72,7 +72,8 @@ struct Options {
     bool overwrite = false;
     // The dataset's colour space; frames convert to sRGB before inference.
     std::string image_gamut;
-    std::optional<bool> image_is_linear;   // unset: an EXR's own header decides
+    std::optional<bool> image_is_linear;   // unset: the file's own declaration
+    colorspace::Exposure image_exposure;
 };
 
 void help_row(const char* flags, const spirula::i18n::Msg& m, int col = 26) {
@@ -109,6 +110,7 @@ void usage() {
     help_row("--overwrite", G::opt_overwrite);
     help_row("--image-gamut <name>", G::opt_image_gamut);
     help_row("--image-linear / --no-image-linear", G::opt_image_linear);
+    help_row("--image-exposure auto|<stops>", G::opt_image_exposure);
     // English, like the other deep diagnostics in this repository: what it
     // prints is a table of numerical errors, read by whoever changed the warp.
     std::fprintf(stderr, "    --check                   "
@@ -206,9 +208,41 @@ int self_check() {
         // bilinear interpolation of a curve, and that error falls with the
         // square of the face's pixels.
         warp.plan(cam, c.w / patch * patch, c.h / patch * patch, c.split, patch, 0,
-                  app::FaceRes::Source);
+                  app::FaceRes::Source, 0, true);
 
         const double* axes = warp.faceAxes();
+        int64_t map_failures = 0, mapped = 0;
+        for (int k = 0; k < warp.faces(); ++k) {
+            const int fw = warp.faceWidth(k), fh = warp.faceHeight(k);
+            const auto& mapping = warp.faceSourcePixels(k);
+            const auto& validity = warp.faceValidity(k);
+            for (int y = 0; y < fh; y += std::max(1, fh / 17))
+                for (int x = 0; x < fw; x += std::max(1, fw / 19)) {
+                    const size_t i = (size_t)y * fw + x;
+                    double source[2];
+                    const bool valid = warp.faceToSource(k, x + 0.5, y + 0.5, source);
+                    const bool in_bounds = valid && source[0] < c.w && source[1] < c.h;
+                    const int64_t index = in_bounds ? (int64_t)source[1] * c.w + (int64_t)source[0] : -1;
+                    if (warp.faceSourceIndices(k)[i] != index) ++map_failures;
+                    if (valid != (validity[i] > 0)) { ++map_failures; continue; }
+                    if (!valid) continue;
+                    ++mapped;
+                    const double dx = source[0] - mapping[2 * i] * (double)c.w / warp.sampleWidth();
+                    const double dy = source[1] - mapping[2 * i + 1] * (double)c.h / warp.sampleHeight();
+                    double unit[3];
+                    const auto ray = warp.faceRay(k, x + 0.5, y + 0.5);
+                    const double length = std::sqrt(ray[0] * ray[0] + ray[1] * ray[1] + ray[2] * ray[2]);
+                    if (std::hypot(dx, dy) > 1e-3 ||
+                        !camhost::generate_ray((source[0] - cam.cx) / cam.fx, (source[1] - cam.cy) / cam.fy,
+                                                cam.model, cam.distortion, cam.dist, unit)) { ++map_failures; continue; }
+                    for (int m = 0; m < 3; ++m)
+                        if (std::fabs(unit[m] - ray[m] / length) > 1e-6) ++map_failures;
+                }
+        }
+        if (map_failures || mapped == 0) ++failures;
+        std::printf("  %s %-30s source mapping: %lld valid, %lld failures\n",
+                    map_failures == 0 && mapped > 0 ? "ok  " : "FAIL", c.name,
+                    (long long)mapped, (long long)map_failures);
         // The plane as each face would see it: `fd` its own z-depth, `fn` its
         // own frame's normal.
         auto face_gt = [&](const double nn3[3], std::vector<std::vector<float>>& fd,
@@ -570,6 +604,9 @@ int spirula_geometry_main(int argc, char** argv) {
         else if (a == "--image-gamut") o.image_gamut = next();
         else if (a == "--image-linear") o.image_is_linear = true;
         else if (a == "--no-image-linear") o.image_is_linear = false;
+        else if (a == "--image-exposure") {
+            if (!colorspace::parse_exposure(next(), o.image_exposure)) { usage(); return 2; }
+        }
         else if (a == "--device") { device = next(); device_set = true; }
         else if (!a.empty() && a[0] == '-') {
             std::fprintf(stderr, "unknown option '%s'\n\n", a.c_str());
@@ -756,8 +793,9 @@ int spirula_geometry_main(int argc, char** argv) {
             const int64_t i = todo[j].i;
             return std::async(std::launch::async, [&, i] {
                 const app::GeometryWarp& warp = warps[(size_t)group[(size_t)i]];
-                const nn::Image img = nn::load_image(ds.image_filenames[(size_t)i],
-                                                     o.image_gamut, o.image_is_linear);
+                const nn::Image img =
+                    nn::load_image(ds.image_filenames[(size_t)i], o.image_gamut,
+                                   o.image_is_linear, o.image_exposure);
                 if (img.empty()) return std::vector<float>();
                 return app::resize_area(img.data.data(), img.width, img.height,
                                         img.channels, warp.sampleWidth(),

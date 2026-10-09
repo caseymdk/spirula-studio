@@ -27,7 +27,8 @@ set(SS_SFM_SHADERS ${SS_SFM_SRC}/shaders)
 if(WIN32)
     set(_sfm_reals_default "float;double")
 else()
-    set(_sfm_reals_default "float;double;df")
+    #set(_sfm_reals_default "float;double;df")
+    set(_sfm_reals_default "float;double")
 endif()
 set(SS_SFM_REALS "${_sfm_reals_default}" CACHE STRING
     "SfM bundle-adjustment scalar configurations to compile")
@@ -160,6 +161,7 @@ add_library(ss_sfm STATIC
     ${SS_SRC}/external/stb_image_impl.cpp
     ${SS_SRC}/external/stb_image_write_impl.cpp
     ${SS_SRC}/core/ExrImage.cpp
+    ${SS_SRC}/core/IccProfile.cpp
     ${SS_SRC}/core/ImageFile.cpp
     ${SS_SRC}/core/MappedFile.cpp
     ${SS_SRC}/core/TiffImage.cpp

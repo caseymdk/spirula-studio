@@ -7,6 +7,7 @@
 //
 // Anything declared here is intentionally not part of the public Engine.h API.
 
+#include "core/PixelFormat.h"
 #include "core/Tensor.h"
 #include "kernels/loss/PerPixelLoss.cuh"   // LossIndex / LossValues / PerPixelGrads
 #include "kernels/pixelwise/PixelWise.cuh"      // PPISPRegLossIndex
@@ -160,6 +161,39 @@ void _engine_background_backward_hook(
     TorchTensorView v_render_rgb,
     TorchTensorView v_render_Ts,
     float overexposure_reg_weight);
+
+// The background's share of the fused appearance chain: the per-step draw
+// settings it shares with the per-stage blend, and the SH skybox rendered into
+// bg.fwd_background (forward) and taken back from its image gradient.
+void _engine_background_chain_params(AppearanceChainParams& p);
+void _engine_background_sh_backward(const float* v_background);
+
+// Background blend, PPISP and the display encode in one kernel each way, from
+// forward_3dgs; engine().appearance says whether this step's forward took it.
+// The forward returns false when the per-stage kernels are to run instead.
+bool _engine_appearance_forward(AppearancePpisp ppisp);
+void _engine_appearance_backward(TorchTensorView v_render_rgb,
+                                 TorchTensorView v_render_Ts,
+                                 float overexposure_reg_weight);
+// The chain's output again, in the ImageBwd phase, for a step whose forward
+// kept it only transiently (AppearanceState::transient_post).
+DeviceTensor3D<float3> _engine_appearance_replay();
+
+// What a training step's forward renders, in which formats, and which stages it
+// fuses -- armed after the GT is installed. A preview arms the same, so it fills
+// the buffers the step sized instead of growing float32 twins of them.
+struct EngineStepConfig;
+enum class DistortionType;
+void _engine_arm_step_forward(const EngineStepConfig& cfg,
+                              DistortionType dist_type, bool image_stages);
+// PPISP and the colour grids the forward left to run, in the step's order.
+void _engine_step_image_stages(TorchTensorView cam_indices);
+
+// An image buffer of `fmt` for [C, H, W] pixels, typed as the float3 tensor the
+// engine passes renders around as; fwd.rgb_fmt says how renders.rgb is stored.
+DeviceTensor3D<float3> _engine_image(PoolSlot slot, int64_t C, int64_t H,
+                                     int64_t W, PixelFormat fmt);
+TorchTensorView _engine_image_view(const DeviceTensor3D<float3>& t, PixelFormat fmt);
 
 // Color space, from forward_3dgs after the background blend: the forward
 // encodes the render for display, the backward turns v_render_rgb back into

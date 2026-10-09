@@ -135,8 +135,8 @@ SS_MSG(input_is_linear,
     RU("Кодировка света на входе"),
     TR("Girdi ışık kodlaması"));
 
-// Item 0 of BOTH colour-space pickers: an EXR declares its own, and this is
-// what says "do not override it".
+// Item 0 of BOTH colour-space pickers: an EXR or a TIFF with an ICC profile
+// declares its own, and this is what says "do not override it".
 SS_MSG(space_from_file,
     EN("From the file"), JA("ファイルから"), ZH_HANS("取自文件"),
     ZH_HANT("取自檔案"), KO("파일에서"), DE("Aus der Datei"),
@@ -159,41 +159,137 @@ SS_MSG(transfer_display,
 
 SS_MSG(input_is_linear_help,
     EN("Whether the pictures hold scene-linear light (EXR, linear 16-bit) or "
-       "ordinary display-encoded values. Read from an EXR's own header unless "
-       "you set it here."),
+       "ordinary display-encoded values. Read from an EXR's header or a TIFF's "
+       "ICC profile unless you set it here."),
     JA("写真がシーンリニアの光（EXR、リニア 16 ビット）か、通常の表示用に"
-       "エンコードされた値かです。ここで設定しない限り、EXR のヘッダーから"
-       "読み取ります。"),
+       "エンコードされた値かです。ここで設定しない限り、EXR のヘッダーや TIFF の"
+       " ICC プロファイルから読み取ります。"),
     ZH_HANS("照片存的是场景线性光（EXR、线性 16 位），还是普通的显示编码数值。"
-            "除非在此设置，否则取自 EXR 自己的文件头。"),
+            "除非在此设置，否则取自 EXR 的文件头或 TIFF 的 ICC 配置文件。"),
     ZH_HANT("照片存的是場景線性光（EXR、線性 16 位元），還是普通的顯示編碼數值。"
-            "除非在此設定，否則取自 EXR 自己的檔頭。"),
+            "除非在此設定，否則取自 EXR 的檔頭或 TIFF 的 ICC 設定檔。"),
     KO("사진이 장면 선형 광(EXR, 선형 16비트)인지 보통의 디스플레이 인코딩 "
-       "값인지입니다. 여기서 설정하지 않으면 EXR 헤더에서 읽습니다."),
+       "값인지입니다. 여기서 설정하지 않으면 EXR 헤더나 TIFF 의 ICC "
+       "프로파일에서 읽습니다."),
     DE("Ob die Bilder szenenlineares Licht (EXR, lineare 16 Bit) oder gewöhnliche "
-       "anzeigecodierte Werte enthalten. Wird aus dem Kopf einer EXR gelesen, "
-       "solange Sie es hier nicht setzen."),
+       "anzeigecodierte Werte enthalten. Wird aus dem Kopf einer EXR oder dem "
+       "ICC-Profil einer TIFF gelesen, solange Sie es hier nicht setzen."),
     FR("Si les images contiennent de la lumière scène-linéaire (EXR, 16 bits "
        "linéaire) ou des valeurs encodées pour l'affichage. Lu dans l'en-tête "
-       "d'un EXR tant que vous ne le réglez pas ici."),
+       "d'un EXR ou le profil ICC d'un TIFF tant que vous ne le réglez pas ici."),
     ES("Si las fotos guardan luz escena-lineal (EXR, 16 bits lineal) o valores "
        "corrientes codificados para pantalla. Se lee de la cabecera de un EXR "
-       "mientras no lo fije aquí."),
+       "o del perfil ICC de un TIFF mientras no lo fije aquí."),
     PT("Se as fotos guardam luz cena-linear (EXR, 16 bits linear) ou valores "
-       "comuns codificados para exibição. Lido do cabeçalho de um EXR enquanto "
-       "não o definir aqui."),
+       "comuns codificados para exibição. Lido do cabeçalho de um EXR ou do "
+       "perfil ICC de um TIFF enquanto não o definir aqui."),
     IT("Se le foto contengono luce scena-lineare (EXR, 16 bit lineare) o comuni "
        "valori codificati per la visualizzazione. Letto dall'intestazione di un "
-       "EXR finché non lo imposti qui."),
+       "EXR o dal profilo ICC di un TIFF finché non lo imposti qui."),
     NL("Of de foto's scène-lineair licht (EXR, lineair 16-bits) bevatten of "
        "gewone voor weergave gecodeerde waarden. Wordt uit de kop van een EXR "
-       "gelezen zolang u het hier niet instelt."),
+       "of het ICC-profiel van een TIFF gelezen zolang u het hier niet instelt."),
     RU("Хранят ли снимки сцен-линейный свет (EXR, линейные 16 бит) или обычные "
-       "значения с кодировкой для дисплея. Читается из заголовка EXR, пока вы не "
-       "зададите это здесь."),
+       "значения с кодировкой для дисплея. Читается из заголовка EXR или "
+       "ICC-профиля TIFF, пока вы не зададите это здесь."),
     TR("Fotoğrafların sahne-doğrusal ışık (EXR, doğrusal 16 bit) mi yoksa "
        "sıradan ekran için kodlanmış değerler mi tuttuğu. Burada ayarlamadığınız "
-       "sürece bir EXR'nin başlığından okunur."));
+       "sürece bir EXR'nin başlığından ya da bir TIFF'in ICC profilinden okunur."));
+
+// What reconstruction, masking and geometry see, never what training reads
+// (--image-exposure). Item 2 opens a number of stops.
+SS_MSG(input_exposure,
+    EN("Exposure for analysis"), JA("解析用の露出"), ZH_HANS("分析用曝光"),
+    ZH_HANT("分析用曝光"), KO("분석용 노출"), DE("Belichtung für die Analyse"),
+    FR("Exposition pour l'analyse"), ES("Exposición para el análisis"),
+    PT("Exposição para a análise"), IT("Esposizione per l'analisi"),
+    NL("Belichting voor analyse"), RU("Экспозиция для анализа"),
+    TR("Analiz için pozlama"));
+
+SS_MSG(exposure_as_stored,
+    EN("As stored"), JA("ファイルのまま"), ZH_HANS("保持原样"), ZH_HANT("保持原樣"),
+    KO("저장된 그대로"), DE("Wie gespeichert"), FR("Telle quelle"), ES("Tal cual"),
+    PT("Como está"), IT("Così com'è"), NL("Zoals opgeslagen"), RU("Как есть"),
+    TR("Olduğu gibi"));
+
+SS_MSG(exposure_auto,
+    EN("Auto"), JA("自動"), ZH_HANS("自动"), ZH_HANT("自動"), KO("자동"),
+    DE("Automatisch"), FR("Automatique"), ES("Automática"), PT("Automática"),
+    IT("Automatica"), NL("Automatisch"), RU("Авто"), TR("Otomatik"));
+
+SS_MSG(exposure_fixed,
+    EN("Fixed"), JA("固定"), ZH_HANS("固定"), ZH_HANT("固定"), KO("고정"),
+    DE("Fest"), FR("Fixe"), ES("Fija"), PT("Fixa"), IT("Fissa"), NL("Vast"),
+    RU("Фиксированная"), TR("Sabit"));
+
+SS_MSG(input_exposure_stops,
+    EN("Stops"), JA("段数"), ZH_HANS("档数"), ZH_HANT("檔數"), KO("스톱"),
+    DE("Blendenstufen"), FR("Diaphs"), ES("Pasos"), PT("Pontos"), IT("Stop"),
+    NL("Stops"), RU("Ступени"), TR("Durak"));
+
+SS_MSG(input_exposure_help,
+    EN("Brightens what reconstruction, AI masking and depth/normal estimation "
+       "see, in linear light, without changing the files or what training reads. "
+       "Auto lifts each picture darker than a typical photograph -- raw exports "
+       "pulled down to keep their highlights. Point cloud colours keep the files' "
+       "own values."),
+    JA("再構成・AI マスキング・深度/法線推定に渡す画像を、ファイルや学習が読む値は"
+       "変えずにリニア光で明るくします。自動は一般的な写真より暗い画像をそれぞれ"
+       "持ち上げます（ハイライトを残すために暗く書き出した RAW 現像など）。点群の"
+       "色はファイル本来の値のままです。"),
+    ZH_HANS("在线性光中调亮重建、AI 遮罩与深度/法线估计所看到的图像，不改动文件，"
+            "也不改变训练读取的数值。自动会提亮比普通照片暗的每张图像——例如为保留"
+            "高光而压暗导出的 RAW。点云颜色保持文件原值。"),
+    ZH_HANT("在線性光中調亮重建、AI 遮罩與深度/法線估計所看到的影像，不改動檔案，"
+            "也不改變訓練讀取的數值。自動會提亮比一般照片暗的每張影像——例如為保留"
+            "高光而壓暗匯出的 RAW。點雲顏色維持檔案原值。"),
+    KO("재구성, AI 마스킹, 깊이/법선 추정이 보는 이미지를 선형 광에서 밝게 하며, "
+       "파일이나 학습이 읽는 값은 바꾸지 않습니다. 자동은 일반 사진보다 어두운 "
+       "이미지를 각각 끌어올립니다(하이라이트를 지키려고 어둡게 내보낸 RAW 등). "
+       "점 구름 색은 파일 본래 값을 유지합니다."),
+    DE("Hellt in linearem Licht auf, was Rekonstruktion, KI-Maskierung und "
+       "Tiefen-/Normalenschätzung sehen, ohne die Dateien oder das, was das "
+       "Training liest, zu ändern. Automatisch hebt jedes Bild an, das dunkler als "
+       "ein typisches Foto ist -- etwa RAW-Exporte, die für die Lichter "
+       "abgedunkelt wurden. Punktwolkenfarben behalten die Werte der Dateien."),
+    FR("Éclaircit en lumière linéaire ce que voient la reconstruction, le masquage "
+       "par IA et l'estimation de profondeur/normales, sans changer les fichiers "
+       "ni ce que lit l'entraînement. Automatique relève chaque image plus sombre "
+       "qu'une photo typique -- des exports RAW assombris pour garder les hautes "
+       "lumières. Les couleurs du nuage de points gardent les valeurs des "
+       "fichiers."),
+    ES("Aclara en luz lineal lo que ven la reconstrucción, el enmascarado por IA "
+       "y la estimación de profundidad/normales, sin cambiar los archivos ni lo "
+       "que lee el entrenamiento. Automática levanta cada imagen más oscura que "
+       "una foto típica -- exportaciones RAW oscurecidas para conservar las "
+       "luces. Los colores de la nube de puntos conservan los valores de los "
+       "archivos."),
+    PT("Clareia em luz linear o que a reconstrução, o mascaramento por IA e a "
+       "estimativa de profundidade/normais veem, sem mudar os arquivos nem o que "
+       "o treino lê. Automática ergue cada imagem mais escura que uma foto típica "
+       "-- exportações RAW escurecidas para manter os realces. As cores da nuvem "
+       "de pontos mantêm os valores dos arquivos."),
+    IT("Schiarisce in luce lineare ciò che vedono ricostruzione, mascheratura con "
+       "IA e stima di profondità/normali, senza cambiare i file né ciò che legge "
+       "l'addestramento. Automatica solleva ogni immagine più scura di una foto "
+       "tipica -- esportazioni RAW scurite per salvare le alte luci. I colori "
+       "della nuvola di punti mantengono i valori dei file."),
+    NL("Maakt in lineair licht lichter wat reconstructie, AI-maskering en "
+       "diepte-/normaalschatting zien, zonder de bestanden of wat de training "
+       "leest te veranderen. Automatisch tilt elk beeld op dat donkerder is dan "
+       "een gewone foto -- RAW-exports die donkerder zijn gemaakt om de "
+       "hooglichten te sparen. Puntenwolkkleuren houden de waarden van de "
+       "bestanden."),
+    RU("Осветляет в линейном свете то, что видят реконструкция, ИИ-маскирование "
+       "и оценка глубины/нормалей, не меняя файлы и то, что читает обучение. "
+       "Авто поднимает каждое изображение темнее обычной фотографии — например, "
+       "RAW, выгруженные темнее ради светов. Цвета облака точек сохраняют "
+       "значения файлов."),
+    TR("Yeniden oluşturmanın, yapay zekâ maskelemenin ve derinlik/normal "
+       "kestiriminin gördüğünü, dosyaları ya da eğitimin okuduğunu değiştirmeden "
+       "doğrusal ışıkta aydınlatır. Otomatik, tipik bir fotoğraftan koyu olan her "
+       "görüntüyü yükseltir -- parlak alanları korumak için koyu dışa aktarılmış "
+       "RAW'lar gibi. Nokta bulutu renkleri dosyaların kendi değerlerini korur."));
 
 SS_MSG(point_color_image_space,
     EN("Point cloud colours in the input colour space"),
@@ -12380,20 +12476,66 @@ SS_MSG(license_download_size,
     RU("Загрузка: около {0}, сохраняется на будущее."),
     TR("İndirme: yaklaşık {0}, bir dahaki sefere saklanır."));
 
+// {0} is the licence's name, e.g. "SAM 3 License (Meta)". The tick every family
+// needs before Accept is enabled.
 SS_MSG(license_accept_tick,
-    EN("I have read and accept these terms"),
-    JA("これらの条件を読み、同意します"),
-    ZH_HANS("我已阅读并接受这些条款"),
-    ZH_HANT("我已閱讀並接受這些條款"),
-    KO("이 조건을 읽었고 이에 동의합니다"),
-    DE("Ich habe diese Bedingungen gelesen und nehme sie an"),
-    FR("J'ai lu et j'accepte ces conditions"),
-    ES("He leído y acepto estos términos"),
-    PT("Li e aceito estes termos"),
-    IT("Ho letto e accetto queste condizioni"),
-    NL("Ik heb deze voorwaarden gelezen en aanvaard ze"),
-    RU("Я прочитал эти условия и принимаю их"),
-    TR("Bu koşulları okudum ve kabul ediyorum"));
+    EN("I have read and accept the terms of {0}"),
+    JA("{0} の条件を読み、同意します"),
+    ZH_HANS("我已阅读并接受 {0} 的条款"),
+    ZH_HANT("我已閱讀並接受 {0} 的條款"),
+    KO("{0}의 조건을 읽었고 이에 동의합니다"),
+    DE("Ich habe die Bedingungen von {0} gelesen und nehme sie an"),
+    FR("J'ai lu et j'accepte les conditions de {0}"),
+    ES("He leído y acepto los términos de {0}"),
+    PT("Li e aceito os termos de {0}"),
+    IT("Ho letto e accetto i termini di {0}"),
+    NL("Ik heb de voorwaarden van {0} gelezen en aanvaard ze"),
+    RU("Я прочитал условия {0} и принимаю их"),
+    TR("{0} koşullarını okudum ve kabul ediyorum"));
+
+// What the user is told after cancelling a licence dialog that a download was
+// waiting on.
+SS_MSG(license_declined_download,
+    EN("The licence was not accepted, so nothing was downloaded."),
+    JA("ライセンスに同意していないため、何もダウンロードしていません。"),
+    ZH_HANS("未接受许可协议，因此没有下载任何内容。"),
+    ZH_HANT("未接受授權條款，因此沒有下載任何內容。"),
+    KO("라이선스에 동의하지 않았으므로 아무것도 내려받지 않았습니다."),
+    DE("Die Lizenz wurde nicht angenommen, deshalb wurde nichts heruntergeladen."),
+    FR("La licence n'a pas été acceptée ; rien n'a donc été téléchargé."),
+    ES("No se aceptó la licencia, así que no se descargó nada."),
+    PT("A licença não foi aceita, então nada foi baixado."),
+    IT("La licenza non è stata accettata, quindi non è stato scaricato nulla."),
+    NL("De licentie is niet aanvaard, dus er is niets gedownload."),
+    RU("Лицензия не принята, поэтому ничего не было загружено."),
+    TR("Lisans kabul edilmedi, bu yüzden hiçbir şey indirilmedi."));
+
+// The same, for a batch: it asks for every licence it needs before it starts.
+SS_MSG(batch_licence_declined,
+    EN("The batch was not started: a licence it needs was not accepted, so nothing "
+       "was downloaded."),
+    JA("バッチは開始されませんでした。必要なライセンスに同意していないため、"
+       "何もダウンロードしていません。"),
+    ZH_HANS("批处理未启动：未接受其所需的许可协议，因此没有下载任何内容。"),
+    ZH_HANT("批次未啟動：未接受其所需的授權條款，因此沒有下載任何內容。"),
+    KO("일괄 작업을 시작하지 않았습니다. 필요한 라이선스에 동의하지 않았으므로 "
+       "아무것도 내려받지 않았습니다."),
+    DE("Der Stapel wurde nicht gestartet: Eine benötigte Lizenz wurde nicht "
+       "angenommen, deshalb wurde nichts heruntergeladen."),
+    FR("Le lot n'a pas démarré : une licence requise n'a pas été acceptée ; "
+       "rien n'a donc été téléchargé."),
+    ES("No se inició el lote: no se aceptó una licencia que necesita, así que "
+       "no se descargó nada."),
+    PT("O lote não foi iniciado: uma licença necessária não foi aceita, então "
+       "nada foi baixado."),
+    IT("Il batch non è stato avviato: una licenza necessaria non è stata "
+       "accettata, quindi non è stato scaricato nulla."),
+    NL("De batch is niet gestart: een benodigde licentie is niet aanvaard, dus "
+       "er is niets gedownload."),
+    RU("Пакет не запущен: нужная лицензия не принята, поэтому ничего не было "
+       "загружено."),
+    TR("Toplu iş başlatılmadı: gereken bir lisans kabul edilmedi, bu yüzden "
+       "hiçbir şey indirilmedi."));
 
 SS_MSG(license_download,
     EN("Download"),      JA("ダウンロード"),  ZH_HANS("下载"),     ZH_HANT("下載"),
@@ -12431,23 +12573,45 @@ SS_MSG(license_no_browser,
 // Log lines this screen writes
 // ===========================================================================
 
-// The pictures are EXRs, so the colour space under Advanced was filled in from
-// their header; {0} is the gamut it found.
-SS_MSG(log_exr_color_space,
-    EN("These are EXR images: reading them as linear {0}, from the file."),
-    JA("EXR 画像です。ファイルの情報に従い、線形 {0} として読み込みます。"),
-    ZH_HANS("这些是 EXR 图像：按文件所记录的线性 {0} 读取。"),
-    ZH_HANT("這些是 EXR 影像：依檔案所記錄的線性 {0} 讀取。"),
-    KO("EXR 이미지입니다. 파일에 기록된 대로 선형 {0}(으)로 읽습니다."),
-    DE("Das sind EXR-Bilder: Sie werden laut Datei als lineares {0} gelesen."),
-    FR("Ce sont des images EXR : elles sont lues comme {0} linéaire, "
+// The pictures declare their colour space (an EXR's header, a TIFF's ICC
+// profile), so the one under Advanced was filled in from it; {0} is the
+// format, {1} the gamut it found.
+SS_MSG(log_file_color_linear,
+    EN("These are {0} images: reading them as linear {1}, from the file."),
+    JA("{0} 画像です。ファイルの情報に従い、線形 {1} として読み込みます。"),
+    ZH_HANS("这些是 {0} 图像：按文件所记录的线性 {1} 读取。"),
+    ZH_HANT("這些是 {0} 影像：依檔案所記錄的線性 {1} 讀取。"),
+    KO("{0} 이미지입니다. 파일에 기록된 대로 선형 {1}(으)로 읽습니다."),
+    DE("Das sind {0}-Bilder: Sie werden laut Datei als lineares {1} gelesen."),
+    FR("Ce sont des images {0} : elles sont lues comme {1} linéaire, "
        "d'après le fichier."),
-    ES("Son imágenes EXR: se leen como {0} lineal, según el archivo."),
-    PT("São imagens EXR: lidas como {0} linear, conforme o arquivo."),
-    IT("Sono immagini EXR: vengono lette come {0} lineare, dal file."),
-    NL("Dit zijn EXR-beelden: ze worden gelezen als lineair {0}, uit het bestand."),
-    RU("Это снимки EXR: они читаются как линейный {0}, по данным файла."),
-    TR("Bunlar EXR görüntüleri: dosyaya göre doğrusal {0} olarak okunuyor."));
+    ES("Son imágenes {0}: se leen como {1} lineal, según el archivo."),
+    PT("São imagens {0}: lidas como {1} linear, conforme o arquivo."),
+    IT("Sono immagini {0}: vengono lette come {1} lineare, dal file."),
+    NL("Dit zijn {0}-beelden: ze worden gelezen als lineair {1}, uit het bestand."),
+    RU("Это снимки {0}: они читаются как линейный {1}, по данным файла."),
+    TR("Bunlar {0} görüntüleri: dosyaya göre doğrusal {1} olarak okunuyor."));
+
+SS_MSG(log_file_color_display,
+    EN("These are {0} images: reading them as display-encoded {1}, from the file."),
+    JA("{0} 画像です。ファイルの情報に従い、表示用エンコードの {1} として読み込みます。"),
+    ZH_HANS("这些是 {0} 图像：按文件所记录的显示编码 {1} 读取。"),
+    ZH_HANT("這些是 {0} 影像：依檔案所記錄的顯示編碼 {1} 讀取。"),
+    KO("{0} 이미지입니다. 파일에 기록된 대로 디스플레이 인코딩된 {1}(으)로 읽습니다."),
+    DE("Das sind {0}-Bilder: Sie werden laut Datei als anzeigecodiertes {1} gelesen."),
+    FR("Ce sont des images {0} : elles sont lues comme {1} encodé pour "
+       "l'affichage, d'après le fichier."),
+    ES("Son imágenes {0}: se leen como {1} codificado para pantalla, según el "
+       "archivo."),
+    PT("São imagens {0}: lidas como {1} codificado para exibição, conforme o "
+       "arquivo."),
+    IT("Sono immagini {0}: vengono lette come {1} codificato per lo schermo, "
+       "dal file."),
+    NL("Dit zijn {0}-beelden: ze worden gelezen als weergavegecodeerd {1}, uit "
+       "het bestand."),
+    RU("Это снимки {0}: они читаются как экранно закодированный {1}, по данным "
+       "файла."),
+    TR("Bunlar {0} görüntüleri: dosyaya göre ekran kodlu {1} olarak okunuyor."));
 
 SS_MSG(log_masks_attached,
     EN("Using {0} as the masks for the images beside it."),
@@ -12933,6 +13097,274 @@ SS_MSG(plan_redo_stale,
     NL("Opnieuw doen: gemaakt uit oudere resultaten"),
     RU("Переделать: сделано по более старым результатам"),
     TR("Yeniden yap: daha eski sonuçlardan yapılmış"));
+
+SS_MSG(plan_redo_features,
+    EN("Redo: the feature points change"),
+    JA("やり直す：特徴点が変わる"),
+    ZH_HANS("重做：特征点会变"),
+    ZH_HANT("重做：特徵點會變"),
+    KO("다시 하기: 특징점이 바뀜"),
+    DE("Neu machen: die Merkmale ändern sich"),
+    FR("Refaire : les points changent"),
+    ES("Rehacer: cambian los puntos"),
+    PT("Refazer: os pontos mudam"),
+    IT("Rifare: cambiano i punti"),
+    NL("Opnieuw doen: de kenmerken veranderen"),
+    RU("Переделать: меняются признаки"),
+    TR("Yeniden yap: öznitelikler değişiyor"));
+
+SS_MSG(plan_redo_matches,
+    EN("Redo: the matches change"),
+    JA("やり直す：照合結果が変わる"),
+    ZH_HANS("重做：匹配结果会变"),
+    ZH_HANT("重做：比對結果會變"),
+    KO("다시 하기: 정합 결과가 바뀜"),
+    DE("Neu machen: die Zuordnungen ändern sich"),
+    FR("Refaire : les appariements changent"),
+    ES("Rehacer: cambian los emparejamientos"),
+    PT("Refazer: os pareamentos mudam"),
+    IT("Rifare: cambiano le corrispondenze"),
+    NL("Opnieuw doen: de koppelingen veranderen"),
+    RU("Переделать: меняются сопоставления"),
+    TR("Yeniden yap: eşleşmeler değişiyor"));
+
+SS_MSG(plan_redo_masked,
+    EN("Redo for the images whose masks change"),
+    JA("マスクが変わる画像だけやり直す"),
+    ZH_HANS("只重做蒙版有变的图像"),
+    ZH_HANT("只重做遮罩有變的影像"),
+    KO("마스크가 바뀌는 이미지만 다시 하기"),
+    DE("Neu machen für die Bilder, deren Masken sich ändern"),
+    FR("Refaire pour les images dont les masques changent"),
+    ES("Rehacer las imágenes cuyas máscaras cambian"),
+    PT("Refazer as imagens cujas máscaras mudam"),
+    IT("Rifare le immagini le cui maschere cambiano"),
+    NL("Opnieuw doen voor de beelden waarvan de maskers veranderen"),
+    RU("Переделать для снимков, у которых меняются маски"),
+    TR("Maskesi değişen görüntüler için yeniden yap"));
+
+SS_MSG(plan_redo_moved,
+    EN("Redo: made from the images in another folder"),
+    JA("やり直す：別のフォルダの画像から作られている"),
+    ZH_HANS("重做：是用另一个文件夹的图像做的"),
+    ZH_HANT("重做：是用另一個資料夾的影像做的"),
+    KO("다시 하기: 다른 폴더의 이미지로 만든 것"),
+    DE("Neu machen: aus den Bildern eines anderen Ordners gemacht"),
+    FR("Refaire : fait à partir des images d'un autre dossier"),
+    ES("Rehacer: se hizo con las imágenes de otra carpeta"),
+    PT("Refazer: feito com as imagens de outra pasta"),
+    IT("Rifare: fatto con le immagini di un'altra cartella"),
+    NL("Opnieuw doen: gemaakt van de beelden in een andere map"),
+    RU("Переделать: сделано по снимкам из другой папки"),
+    TR("Yeniden yap: başka bir klasördeki görüntülerden yapılmış"));
+
+SS_MSG(plan_reuse_if_same,
+    EN("Reuse if made with these settings"),
+    JA("この設定で作られていればそのまま使う"),
+    ZH_HANS("如果是用这些设置做的就沿用"),
+    ZH_HANT("如果是用這些設定做的就沿用"),
+    KO("이 설정으로 만든 것이면 그대로 사용"),
+    DE("Weiterverwenden, falls mit diesen Einstellungen gemacht"),
+    FR("Réutiliser si fait avec ces réglages"),
+    ES("Reutilizar si se hizo con estos ajustes"),
+    PT("Reutilizar se foi feito com estas definições"),
+    IT("Riutilizzare se fatto con queste impostazioni"),
+    NL("Hergebruiken als het met deze instellingen gemaakt is"),
+    RU("Использовать, если сделано с этими настройками"),
+    TR("Bu ayarlarla yapıldıysa yeniden kullan"));
+
+// The reconstruction's own stages, listed under it (DatasetPlan.h ModelPart).
+SS_MSG(plan_part_features,
+    EN("Feature extraction"),
+    JA("特徴点の抽出"),   ZH_HANS("特征点提取"), ZH_HANT("特徵點提取"),
+    KO("특징점 추출"),     DE("Merkmalsextraktion"), FR("Extraction des points"),
+    ES("Extracción de puntos"), PT("Extração de pontos"), IT("Estrazione dei punti"),
+    NL("Kenmerken extraheren"), RU("Извлечение признаков"), TR("Öznitelik çıkarma"));
+
+SS_MSG(plan_part_mapping,
+    EN("Mapping"),
+    JA("マッピング"),     ZH_HANS("建图"),      ZH_HANT("建圖"),
+    KO("매핑"),           DE("Kartierung"),   FR("Cartographie"),
+    ES("Mapeo"),         PT("Mapeamento"),   IT("Mappatura"),
+    NL("Kartering"),     RU("Картирование"), TR("Haritalama"));
+
+SS_MSG(plan_part_align,
+    EN("LiDAR alignment"),
+    JA("LiDAR との位置合わせ"), ZH_HANS("与 LiDAR 对齐"), ZH_HANT("與 LiDAR 對齊"),
+    KO("LiDAR 정렬"),      DE("LiDAR-Ausrichtung"), FR("Alignement LiDAR"),
+    ES("Alineación con LiDAR"), PT("Alinhamento com LiDAR"), IT("Allineamento LiDAR"),
+    NL("LiDAR-uitlijning"), RU("Совмещение с LiDAR"), TR("LiDAR hizalama"));
+
+SS_MSG(plan_part_toggle_help,
+    EN("Ticked, this stage runs. Untick it to keep what an earlier run left "
+       "instead, or tick one that would be reused to make it again; every stage "
+       "after one that runs runs too."),
+    JA("チェックするとこの段階を実行します。外すと前の実行が残したものをそのまま"
+       "使い、再利用される段階にチェックを入れると作り直します。実行する段階より"
+       "後の段階もすべて実行されます。"),
+    ZH_HANS("勾选则运行这一阶段。取消勾选会沿用之前运行留下的结果；给会被沿用的阶段"
+            "打勾则重做。运行的阶段之后的阶段也都会运行。"),
+    ZH_HANT("勾選則執行這一階段。取消勾選會沿用之前執行留下的結果；給會被沿用的階段"
+            "打勾則重做。執行的階段之後的階段也都會執行。"),
+    KO("체크하면 이 단계를 실행합니다. 해제하면 이전 실행이 남긴 것을 그대로 쓰고, "
+       "다시 쓰일 단계에 체크하면 다시 만듭니다. 실행되는 단계 다음의 단계도 모두 "
+       "실행됩니다."),
+    DE("Angehakt läuft dieser Schritt. Ohne Haken bleibt, was ein früherer Lauf "
+       "hinterlassen hat; ein Haken bei einem Schritt, der weiterverwendet würde, "
+       "macht ihn neu. Auf einen Schritt, der läuft, folgen alle weiteren."),
+    FR("Cochée, cette étape s'exécute. Décochez-la pour garder ce qu'une exécution "
+       "précédente a laissé, ou cochez une étape qui serait réutilisée pour la "
+       "refaire ; toute étape après une étape qui s'exécute s'exécute aussi."),
+    ES("Marcada, esta etapa se ejecuta. Desmárquela para conservar lo que dejó una "
+       "ejecución anterior, o marque una que se reutilizaría para rehacerla; toda "
+       "etapa posterior a una que se ejecuta también se ejecuta."),
+    PT("Marcada, esta etapa é executada. Desmarque-a para manter o que uma "
+       "execução anterior deixou, ou marque uma que seria reutilizada para a "
+       "refazer; todas as etapas depois de uma que é executada também o são."),
+    IT("Spuntata, questa fase viene eseguita. Togli la spunta per tenere ciò che "
+       "ha lasciato un'esecuzione precedente, o spunta una fase che verrebbe "
+       "riutilizzata per rifarla; ogni fase dopo una che viene eseguita viene "
+       "eseguita anch'essa."),
+    NL("Aangevinkt wordt deze stap uitgevoerd. Vink hem uit om te houden wat een "
+       "eerdere run achterliet, of vink een stap aan die hergebruikt zou worden om "
+       "hem opnieuw te doen; elke stap na een stap die loopt, loopt ook."),
+    RU("Отмеченный этап выполняется. Снимите отметку, чтобы оставить то, что "
+       "сделал прошлый запуск, или отметьте этап, который использовался бы как "
+       "есть, чтобы сделать его заново; все этапы после выполняемого тоже "
+       "выполняются."),
+    TR("İşaretliyse bu aşama çalışır. Önceki bir çalıştırmanın bıraktığını korumak "
+       "için işareti kaldırın ya da yeniden kullanılacak bir aşamayı yeniden yapmak "
+       "için işaretleyin; çalışan bir aşamadan sonraki her aşama da çalışır."));
+
+SS_MSG(plan_lock_nothing,
+    EN("Nothing finished is on disk for this stage, so it has to run."),
+    JA("この段階の完成した結果がディスクにないので、実行が必要です。"),
+    ZH_HANS("磁盘上没有这一阶段做完的结果，所以必须运行。"),
+    ZH_HANT("磁碟上沒有這一階段做完的結果，所以必須執行。"),
+    KO("이 단계의 끝난 결과가 디스크에 없어서 실행해야 합니다."),
+    DE("Für diesen Schritt liegt nichts Fertiges auf der Festplatte, also muss er laufen."),
+    FR("Rien de terminé n'est sur le disque pour cette étape : elle doit s'exécuter."),
+    ES("No hay nada terminado en disco para esta etapa, así que debe ejecutarse."),
+    PT("Não há nada terminado no disco para esta etapa, por isso tem de ser executada."),
+    IT("Su disco non c'è niente di finito per questa fase, quindi va eseguita."),
+    NL("Er staat voor deze stap niets afgerond op schijf, dus hij moet lopen."),
+    RU("Для этого этапа на диске нет готового результата, поэтому он выполняется."),
+    TR("Bu aşama için diskte bitmiş bir şey yok, bu yüzden çalışması gerekiyor."));
+
+SS_MSG(plan_lock_frames,
+    EN("The frames are made again, so the feature points of the old ones cannot "
+       "be kept."),
+    JA("フレームを作り直すので、古いフレームの特徴点は残せません。"),
+    ZH_HANS("帧会重做，所以旧帧的特征点不能保留。"),
+    ZH_HANT("影格會重做，所以舊影格的特徵點不能保留。"),
+    KO("프레임을 다시 만들기 때문에 예전 프레임의 특징점은 남겨 둘 수 없습니다."),
+    DE("Die Bilder werden neu gemacht, also lassen sich die Merkmale der alten "
+       "nicht behalten."),
+    FR("Les images sont refaites : les points des anciennes ne peuvent pas être "
+       "gardés."),
+    ES("Los fotogramas se rehacen, así que no se pueden conservar los puntos de "
+       "los anteriores."),
+    PT("Os quadros são refeitos, por isso os pontos dos antigos não podem ser "
+       "mantidos."),
+    IT("I fotogrammi vengono rifatti, quindi i punti di quelli vecchi non si "
+       "possono tenere."),
+    NL("De beelden worden opnieuw gemaakt, dus de kenmerken van de oude kunnen "
+       "niet blijven."),
+    RU("Кадры делаются заново, поэтому признаки старых кадров оставить нельзя."),
+    TR("Kareler yeniden yapılıyor, bu yüzden eskilerin öznitelikleri korunamaz."));
+
+SS_MSG(plan_lock_frontend,
+    EN("These feature points are of another type than the one chosen, and its "
+       "matcher cannot read them."),
+    JA("これらの特徴点は選んだものと種類が違い、その照合器では読めません。"),
+    ZH_HANS("这些特征点和所选的类型不同，它的匹配器读不了。"),
+    ZH_HANT("這些特徵點和所選的類型不同，它的比對器讀不了。"),
+    KO("이 특징점은 고른 것과 종류가 달라 그 정합기가 읽을 수 없습니다."),
+    DE("Diese Merkmale sind von einer anderen Art als der gewählten, und deren "
+       "Zuordnung kann sie nicht lesen."),
+    FR("Ces points sont d'un autre type que celui choisi, et son apparieur ne "
+       "peut pas les lire."),
+    ES("Estos puntos son de otro tipo que el elegido, y su emparejador no puede "
+       "leerlos."),
+    PT("Estes pontos são de outro tipo que o escolhido, e o seu emparelhador não "
+       "os consegue ler."),
+    IT("Questi punti sono di un tipo diverso da quello scelto, e il suo "
+       "abbinatore non li sa leggere."),
+    NL("Deze kenmerken zijn van een ander soort dan het gekozen, en de koppelaar "
+       "daarvan kan ze niet lezen."),
+    RU("Эти признаки другого типа, чем выбранный, и его сопоставитель не может "
+       "их прочитать."),
+    TR("Bu öznitelikler seçilenden farklı türde ve onun eşleştiricisi bunları "
+       "okuyamaz."));
+
+SS_MSG(plan_lock_before,
+    EN("The stage before it is made again, so this one has to run too."),
+    JA("前の段階を作り直すので、この段階も実行が必要です。"),
+    ZH_HANS("前一个阶段会重做，所以这一阶段也必须运行。"),
+    ZH_HANT("前一個階段會重做，所以這一階段也必須執行。"),
+    KO("앞 단계를 다시 만들기 때문에 이 단계도 실행해야 합니다."),
+    DE("Der Schritt davor wird neu gemacht, also muss auch dieser laufen."),
+    FR("L'étape d'avant est refaite : celle-ci doit donc s'exécuter aussi."),
+    ES("La etapa anterior se rehace, así que esta también debe ejecutarse."),
+    PT("A etapa anterior é refeita, por isso esta também tem de ser executada."),
+    IT("La fase precedente viene rifatta, quindi anche questa va eseguita."),
+    NL("De stap ervoor wordt opnieuw gedaan, dus deze moet ook lopen."),
+    RU("Предыдущий этап делается заново, поэтому этот тоже выполняется."),
+    TR("Önceki aşama yeniden yapılıyor, bu yüzden bu da çalışmalı."));
+
+SS_MSG(plan_lock_lens,
+    EN("A lens setting changed. The matches carry the lenses they were checked "
+       "with, so keeping them would leave the change unused."),
+    JA("レンズの設定が変わりました。照合結果は検証に使ったレンズを持っているので、"
+       "残すと変更が使われません。"),
+    ZH_HANS("镜头设置变了。匹配结果带着验证时用的镜头，保留它们就等于没用上这个改动。"),
+    ZH_HANT("鏡頭設定變了。匹配結果帶著驗證時用的鏡頭，保留它們就等於沒用上這個改動。"),
+    KO("렌즈 설정이 바뀌었습니다. 정합 결과는 검증에 쓴 렌즈를 담고 있어서, 남겨 "
+       "두면 바꾼 설정이 쓰이지 않습니다."),
+    DE("Eine Objektiveinstellung hat sich geändert. Die Paare tragen die Objektive, "
+       "mit denen sie geprüft wurden; behalten bliebe die Änderung ungenutzt."),
+    FR("Un réglage d'objectif a changé. Les appariements portent les objectifs avec "
+       "lesquels ils ont été vérifiés : les garder laisserait le changement sans "
+       "effet."),
+    ES("Cambió un ajuste de lente. Los emparejamientos llevan las lentes con que se "
+       "verificaron, así que conservarlos dejaría el cambio sin efecto."),
+    PT("Mudou uma definição de lente. Os pareamentos levam as lentes com que foram "
+       "verificados, por isso mantê-los deixaria a mudança sem efeito."),
+    IT("È cambiata un'impostazione dell'obiettivo. Gli abbinamenti portano gli "
+       "obiettivi con cui sono stati verificati: tenerli lascerebbe il cambiamento "
+       "senza effetto."),
+    NL("Een lensinstelling is veranderd. De koppelingen dragen de lenzen waarmee "
+       "ze gecontroleerd zijn, dus houden zou de wijziging ongebruikt laten."),
+    RU("Изменилась настройка объектива. Сопоставления хранят объективы, с которыми "
+       "их проверяли, поэтому, оставив их, изменение не будет использовано."),
+    TR("Bir lens ayarı değişti. Eşlemeler doğrulandıkları lensleri taşıyor; "
+       "korunurlarsa değişiklik kullanılmamış olur."));
+
+SS_MSG(plan_lock_mapping,
+    EN("Mapping is the reconstruction itself and runs whenever it is made. To "
+       "skip it, keep the reconstruction as it is."),
+    JA("マッピングは再構成そのもので、再構成を作るときは必ず実行します。省くには"
+       "再構成をそのまま残してください。"),
+    ZH_HANS("建图就是重建本身，只要做重建就会运行。要跳过它，请保留现有的重建。"),
+    ZH_HANT("建圖就是重建本身，只要做重建就會執行。要跳過它，請保留現有的重建。"),
+    KO("매핑은 재구성 그 자체라서 재구성을 만들 때마다 실행됩니다. 건너뛰려면 "
+       "재구성을 그대로 남겨 두세요."),
+    DE("Die Kartierung ist die Rekonstruktion selbst und läuft, wann immer sie "
+       "gemacht wird. Um sie zu überspringen, die Rekonstruktion behalten."),
+    FR("La cartographie est la reconstruction elle-même et s'exécute chaque fois "
+       "qu'elle est faite. Pour l'éviter, gardez la reconstruction telle quelle."),
+    ES("El mapeo es la reconstrucción misma y se ejecuta siempre que se hace. "
+       "Para saltarlo, conserve la reconstrucción tal como está."),
+    PT("O mapeamento é a própria reconstrução e é executado sempre que ela é "
+       "feita. Para o saltar, mantenha a reconstrução como está."),
+    IT("La mappatura è la ricostruzione stessa e viene eseguita ogni volta che "
+       "la si fa. Per saltarla, tieni la ricostruzione così com'è."),
+    NL("Kartering is de reconstructie zelf en loopt telkens als die gemaakt "
+       "wordt. Houd de reconstructie zoals ze is om haar over te slaan."),
+    RU("Картирование и есть реконструкция и выполняется всякий раз, когда она "
+       "делается. Чтобы пропустить его, оставьте реконструкцию как есть."),
+    TR("Haritalama yeniden kurmanın kendisidir ve her yapıldığında çalışır. "
+       "Atlamak için yeniden kurmayı olduğu gibi koruyun."));
 
 SS_MSG(plan_keep_built,
     EN("Keep the existing frames and reconstruction"),
@@ -14502,6 +14934,57 @@ SS_MSG(license_birefnet_summary,
        "приложение оставалось небольшим."),
     TR("BiRefNet (Peng Zheng ve ark.) MIT lisansıyla yayımlanır. Onaylanacak olağandışı "
        "bir şey yok; uygulama küçük kalsın diye birlikte gelmez, indirilir."));
+
+// {0} is the settings file.
+SS_MSG(license_not_saved,
+    EN("Could not save your acceptance to {0}, so the licence is not accepted."),
+    JA("同意を {0} に保存できなかったため、ライセンスには同意していない扱いです。"),
+    ZH_HANS("无法把你的接受记录保存到 {0}，因此该许可协议尚未被接受。"),
+    ZH_HANT("無法把你的接受記錄儲存到 {0}，因此該授權條款尚未被接受。"),
+    KO("동의를 {0}에 저장하지 못해 라이선스에 동의하지 않은 것으로 처리됩니다."),
+    DE("Die Zustimmung ließ sich nicht in {0} speichern, die Lizenz gilt daher "
+       "nicht als angenommen."),
+    FR("Impossible d'enregistrer votre acceptation dans {0} ; la licence n'est "
+       "donc pas acceptée."),
+    ES("No se pudo guardar tu aceptación en {0}, así que la licencia no está "
+       "aceptada."),
+    PT("Não foi possível salvar sua aceitação em {0}, então a licença não está "
+       "aceita."),
+    IT("Impossibile salvare la tua accettazione in {0}, quindi la licenza non "
+       "risulta accettata."),
+    NL("Je aanvaarding kon niet worden opgeslagen in {0}, dus de licentie is niet "
+       "aanvaard."),
+    RU("Не удалось сохранить ваше согласие в {0}, поэтому лицензия не считается "
+       "принятой."),
+    TR("Kabulünüz {0} dosyasına kaydedilemedi, bu yüzden lisans kabul edilmiş "
+       "sayılmaz."));
+
+// {0} is the licence family, e.g. "sam3".
+SS_MSG(license_not_accepted_download,
+    EN("The {0} licence has not been accepted, so nothing was downloaded."),
+    JA("{0} のライセンスに同意していないため、何もダウンロードしていません。"),
+    ZH_HANS("尚未接受 {0} 许可协议，因此没有下载任何内容。"),
+    ZH_HANT("尚未接受 {0} 授權條款，因此沒有下載任何內容。"),
+    KO("{0} 라이선스에 동의하지 않았으므로 아무것도 내려받지 않았습니다."),
+    DE("Die Lizenz {0} wurde nicht angenommen, deshalb wurde nichts heruntergeladen."),
+    FR("La licence {0} n'a pas été acceptée ; rien n'a donc été téléchargé."),
+    ES("No se ha aceptado la licencia {0}, así que no se descargó nada."),
+    PT("A licença {0} não foi aceita, então nada foi baixado."),
+    IT("La licenza {0} non è stata accettata, quindi non è stato scaricato nulla."),
+    NL("De licentie {0} is niet aanvaard, dus er is niets gedownload."),
+    RU("Лицензия {0} не принята, поэтому ничего не было загружено."),
+    TR("{0} lisansı kabul edilmedi, bu yüzden hiçbir şey indirilmedi."));
+
+SS_MSG(license_accept,
+    EN("Accept"), JA("同意する"), ZH_HANS("接受"), ZH_HANT("接受"), KO("동의"),
+    DE("Annehmen"), FR("Accepter"), ES("Aceptar"), PT("Aceitar"), IT("Accetta"),
+    NL("Aanvaarden"), RU("Принять"), TR("Kabul et"));
+
+SS_MSG(license_full_text,
+    EN("Full text"), JA("全文"), ZH_HANS("全文"), ZH_HANT("全文"), KO("전문"),
+    DE("Vollständiger Text"), FR("Texte intégral"), ES("Texto completo"),
+    PT("Texto completo"), IT("Testo completo"), NL("Volledige tekst"),
+    RU("Полный текст"), TR("Tam metin"));
 
 SS_MSG(mask_subject_note,
     EN("This model finds the main subject of each frame by itself: no prompt and no "

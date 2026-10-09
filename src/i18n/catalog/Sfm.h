@@ -271,59 +271,75 @@ SS_MSG(lens_skip_images,
     RU("в его папке нет читаемых кадров"),
     TR("klasöründe okunabilen kare yok"));
 
-// The images are EXRs and the transfer was left to them; {0} is the gamut in
-// force. Everything here converts to sRGB before it looks at a pixel.
-SS_MSG(run_exr_color,
-    EN("EXR input read as linear {0}"),
-    JA("EXR 入力を線形 {0} として読み込みます"),
-    ZH_HANS("EXR 输入按线性 {0} 读取"),
-    ZH_HANT("EXR 輸入依線性 {0} 讀取"),
-    KO("EXR 입력을 선형 {0}(으)로 읽습니다"),
-    DE("EXR-Eingabe wird als lineares {0} gelesen"),
-    FR("Entrée EXR lue comme {0} linéaire"),
-    ES("Entrada EXR leída como {0} lineal"),
-    PT("Entrada EXR lida como {0} linear"),
-    IT("Ingresso EXR letto come {0} lineare"),
-    NL("EXR-invoer gelezen als lineair {0}"),
-    RU("Вход EXR читается как линейный {0}"),
-    TR("EXR girdisi doğrusal {0} olarak okunuyor"));
+// The images declare their colour space -- an EXR's header, a TIFF's ICC
+// profile -- and the transfer was left to them. {0} is the format ("EXR",
+// "TIFF"), {1} the gamut in force.
+SS_MSG(run_file_color_linear,
+    EN("{0} input read as linear {1}"),
+    JA("{0} 入力を線形 {1} として読み込みます"),
+    ZH_HANS("{0} 输入按线性 {1} 读取"),
+    ZH_HANT("{0} 輸入依線性 {1} 讀取"),
+    KO("{0} 입력을 선형 {1}(으)로 읽습니다"),
+    DE("{0}-Eingabe wird als lineares {1} gelesen"),
+    FR("Entrée {0} lue comme {1} linéaire"),
+    ES("Entrada {0} leída como {1} lineal"),
+    PT("Entrada {0} lida como {1} linear"),
+    IT("Ingresso {0} letto come {1} lineare"),
+    NL("{0}-invoer gelezen als lineair {1}"),
+    RU("Вход {0} читается как линейный {1}"),
+    TR("{0} girdisi doğrusal {1} olarak okunuyor"));
 
-SS_MSG(run_exr_gamut_from_file,
-    EN("EXR colour space: {0}, from the file"),
-    JA("EXR の色空間: {0}（ファイルの情報）"),
-    ZH_HANS("EXR 色彩空间: {0}（取自文件）"),
-    ZH_HANT("EXR 色彩空間: {0}（取自檔案）"),
-    KO("EXR 색 공간: {0}(파일에서 읽음)"),
-    DE("EXR-Farbraum: {0}, aus der Datei"),
-    FR("Espace colorimétrique EXR : {0}, d'après le fichier"),
-    ES("Espacio de color EXR: {0}, según el archivo"),
-    PT("Espaço de cor EXR: {0}, conforme o arquivo"),
-    IT("Spazio colore EXR: {0}, dal file"),
-    NL("EXR-kleurruimte: {0}, uit het bestand"),
-    RU("Цветовое пространство EXR: {0}, из файла"),
-    TR("EXR renk uzayı: {0}, dosyadan"));
+SS_MSG(run_file_color_display,
+    EN("{0} input read as display-encoded {1}"),
+    JA("{0} 入力を表示用エンコードの {1} として読み込みます"),
+    ZH_HANS("{0} 输入按显示编码的 {1} 读取"),
+    ZH_HANT("{0} 輸入依顯示編碼的 {1} 讀取"),
+    KO("{0} 입력을 디스플레이 인코딩된 {1}(으)로 읽습니다"),
+    DE("{0}-Eingabe wird als anzeigecodiertes {1} gelesen"),
+    FR("Entrée {0} lue comme {1} encodé pour l'affichage"),
+    ES("Entrada {0} leída como {1} codificado para pantalla"),
+    PT("Entrada {0} lida como {1} codificado para exibição"),
+    IT("Ingresso {0} letto come {1} codificato per lo schermo"),
+    NL("{0}-invoer gelezen als weergavegecodeerd {1}"),
+    RU("Вход {0} читается как экранно закодированный {1}"),
+    TR("{0} girdisi ekran kodlu {1} olarak okunuyor"));
 
-SS_MSG(run_exr_gamut_unknown,
-    EN("The EXR's color primaries match no known color space; reading it as Rec.709"),
-    JA("EXR の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
-    ZH_HANS("EXR 的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
-    ZH_HANT("EXR 的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
-    KO("EXR의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
-    DE("Die Primärfarben der EXR passen zu keinem bekannten Farbraum; "
+SS_MSG(run_file_gamut_from_file,
+    EN("{0} colour space: {1}, from the file"),
+    JA("{0} の色空間: {1}（ファイルの情報）"),
+    ZH_HANS("{0} 色彩空间: {1}（取自文件）"),
+    ZH_HANT("{0} 色彩空間: {1}（取自檔案）"),
+    KO("{0} 색 공간: {1}(파일에서 읽음)"),
+    DE("{0}-Farbraum: {1}, aus der Datei"),
+    FR("Espace colorimétrique {0} : {1}, d'après le fichier"),
+    ES("Espacio de color {0}: {1}, según el archivo"),
+    PT("Espaço de cor {0}: {1}, conforme o arquivo"),
+    IT("Spazio colore {0}: {1}, dal file"),
+    NL("{0}-kleurruimte: {1}, uit het bestand"),
+    RU("Цветовое пространство {0}: {1}, из файла"),
+    TR("{0} renk uzayı: {1}, dosyadan"));
+
+SS_MSG(run_file_gamut_unknown,
+    EN("The {0} input's color primaries match no known color space; reading it as Rec.709"),
+    JA("{0} 入力の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
+    ZH_HANS("{0} 输入的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
+    ZH_HANT("{0} 輸入的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
+    KO("{0} 입력의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
+    DE("Die Primärfarben der {0}-Eingabe passen zu keinem bekannten Farbraum; "
        "sie wird als Rec.709 gelesen"),
-    FR("Les primaires de l'EXR ne correspondent à aucun espace connu ; "
+    FR("Les primaires de l'entrée {0} ne correspondent à aucun espace connu ; "
        "lecture en Rec.709"),
-    ES("Los primarios del EXR no coinciden con ningún espacio conocido; "
+    ES("Los primarios de la entrada {0} no coinciden con ningún espacio conocido; "
        "se lee como Rec.709"),
-    PT("Os primários do EXR não correspondem a nenhum espaço conhecido; "
-       "lido como Rec.709"),
-    IT("I primari dell'EXR non corrispondono ad alcuno spazio noto; "
+    PT("Os primários da entrada {0} não correspondem a nenhum espaço conhecido; "
+       "lida como Rec.709"),
+    IT("I primari dell'ingresso {0} non corrispondono ad alcuno spazio noto; "
        "viene letto come Rec.709"),
-    NL("De primaire kleuren van de EXR passen bij geen bekende kleurruimte; "
-       "hij wordt als Rec.709 gelezen"),
-    RU("Основные цвета EXR не совпадают ни с одним известным пространством; "
-       "файл читается как Rec.709"),
-    TR("EXR'nin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
+    NL("De primaire kleuren van de {0}-invoer passen bij geen bekende kleurruimte; "
+       "die wordt als Rec.709 gelezen"),
+    RU("Основные цвета входа {0} не совпадают ни с одним известным пространством; "
+       "вход читается как Rec.709"),
+    TR("{0} girdisinin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
        "Rec.709 olarak okunuyor"));
 
 SS_MSG(run_masks,
@@ -755,6 +771,78 @@ SS_MSG(extract_mask_empty,
     TR("{0} maskesi {1} içinde tek bir anahtar nokta bırakmadı. Maskeler beyaz pikselleri "
        "tutar, siyahları yok sayar; ters çevrilmiş bir maske tüm görüntüyü eler."));
 
+// --image-exposure: what the detectors were shown, in signed EV. {0} and {1}
+// are the least and the most any one image was given.
+SS_MSG(extract_exposure_auto,
+    EN("Exposure for the detectors: auto, {0} to {1} EV"),
+    JA("検出器向けの露出: 自動、{0} ～ {1} EV"),
+    ZH_HANS("检测器所用曝光：自动，{0} 至 {1} EV"),
+    ZH_HANT("偵測器所用曝光：自動，{0} 至 {1} EV"),
+    KO("검출기용 노출: 자동, {0} ~ {1} EV"),
+    DE("Belichtung für die Detektoren: automatisch, {0} bis {1} EV"),
+    FR("Exposition pour les détecteurs : auto, de {0} à {1} EV"),
+    ES("Exposición para los detectores: auto, de {0} a {1} EV"),
+    PT("Exposição para os detectores: auto, de {0} a {1} EV"),
+    IT("Esposizione per i rilevatori: auto, da {0} a {1} EV"),
+    NL("Belichting voor de detectoren: automatisch, {0} tot {1} EV"),
+    RU("Экспозиция для детекторов: авто, от {0} до {1} EV"),
+    TR("Algılayıcılar için pozlama: otomatik, {0} ile {1} EV arası"));
+
+SS_MSG(extract_exposure_fixed,
+    EN("Exposure for the detectors: {0} EV"),
+    JA("検出器向けの露出: {0} EV"),
+    ZH_HANS("检测器所用曝光：{0} EV"),
+    ZH_HANT("偵測器所用曝光：{0} EV"),
+    KO("검출기용 노출: {0} EV"),
+    DE("Belichtung für die Detektoren: {0} EV"),
+    FR("Exposition pour les détecteurs : {0} EV"),
+    ES("Exposición para los detectores: {0} EV"),
+    PT("Exposição para os detectores: {0} EV"),
+    IT("Esposizione per i rilevatori: {0} EV"),
+    NL("Belichting voor de detectoren: {0} EV"),
+    RU("Экспозиция для детекторов: {0} EV"),
+    TR("Algılayıcılar için pozlama: {0} EV"));
+
+// Read as linear, and the largest value across all of them is exactly 1.0 --
+// what display-encoded pixels labelled linear look like.
+SS_MSG(extract_linear_peak_one,
+    EN("Images read as linear light normally go past 1.0, and none of these does: "
+       "either they are display-encoded (--no-image-linear), or their highlights "
+       "were clipped at white"),
+    JA("リニア光として読み込む画像は通常 1.0 を超えますが、これらはどれも超えていません。"
+       "表示用エンコードの画像（--no-image-linear）か、ハイライトが白でクリップされています"),
+    ZH_HANS("按线性光读取的图像通常会超过 1.0，而这些图像都没有：要么是显示编码的"
+            "（--no-image-linear），要么高光已在白点处被截断"),
+    ZH_HANT("依線性光讀取的影像通常會超過 1.0，而這些影像都沒有：要麼是顯示編碼的"
+            "（--no-image-linear），要麼高光已在白點處被截斷"),
+    KO("선형 광으로 읽는 이미지는 보통 1.0을 넘지만 이 이미지들은 하나도 넘지 않습니다. "
+       "디스플레이 인코딩된 이미지이거나(--no-image-linear) 하이라이트가 흰색에서 "
+       "잘렸습니다"),
+    DE("Als lineares Licht gelesene Bilder gehen meist über 1.0 hinaus, diese aber "
+       "nicht: Entweder sind sie anzeigecodiert (--no-image-linear), oder ihre "
+       "Lichter wurden bei Weiß abgeschnitten"),
+    FR("Des images lues en lumière linéaire dépassent normalement 1.0, et aucune "
+       "de celles-ci : soit elles sont encodées pour l'affichage "
+       "(--no-image-linear), soit leurs hautes lumières ont été écrêtées au blanc"),
+    ES("Las imágenes leídas como luz lineal suelen pasar de 1.0, y ninguna de estas "
+       "lo hace: o están codificadas para pantalla (--no-image-linear), o sus luces "
+       "se recortaron en el blanco"),
+    PT("Imagens lidas como luz linear costumam passar de 1.0, e nenhuma destas "
+       "passa: ou estão codificadas para exibição (--no-image-linear), ou os "
+       "realces foram cortados no branco"),
+    IT("Le immagini lette come luce lineare di solito superano 1.0, e nessuna di "
+       "queste lo fa: o sono codificate per lo schermo (--no-image-linear), o le "
+       "alte luci sono state tagliate al bianco"),
+    NL("Beelden die als lineair licht worden gelezen komen meestal boven 1.0, en "
+       "geen van deze doet dat: ze zijn weergavegecodeerd (--no-image-linear), of "
+       "hun hooglichten zijn bij wit afgekapt"),
+    RU("Изображения, читаемые как линейный свет, обычно выходят за 1.0, а эти — "
+       "нет: либо они экранно закодированы (--no-image-linear), либо их света "
+       "обрезаны на белом"),
+    TR("Doğrusal ışık olarak okunan görüntüler genellikle 1.0'ı aşar; bunların "
+       "hiçbiri aşmıyor: ya ekran kodlular (--no-image-linear) ya da parlak "
+       "alanları beyazda kırpılmış"));
+
 SS_MSG(extract_reusing,
     EN("Features an earlier run already wrote: {0}/{1} images -- keeping them."),
     JA("前回の実行が書き出した特徴点: {0}/{1} 枚。そのまま使います。"),
@@ -769,6 +857,21 @@ SS_MSG(extract_reusing,
     NL("Kenmerken die een eerdere run al schreef: {0}/{1} afbeeldingen -- die blijven."),
     RU("Признаков, записанных прошлым запуском: {0}/{1} изображений — используем их."),
     TR("Önceki çalıştırmanın yazdığı öznitelik: {0}/{1} görüntü -- korunuyor."));
+
+SS_MSG(extract_kept_other_settings,
+    EN("Keeping the features in {0} although other settings made them (--reuse-features keep)."),
+    JA("{0} の特徴点は別の設定で作られていますが、そのまま使います（--reuse-features keep）。"),
+    ZH_HANS("{0} 里的特征是用别的设置做的，仍然沿用（--reuse-features keep）。"),
+    ZH_HANT("{0} 裡的特徵是用別的設定做的，仍然沿用（--reuse-features keep）。"),
+    KO("{0} 의 특징점은 다른 설정으로 만든 것이지만 그대로 씁니다（--reuse-features keep）."),
+    DE("Die Merkmale in {0} werden behalten, obwohl andere Einstellungen sie erzeugt haben (--reuse-features keep)."),
+    FR("Les points de {0} sont conservés bien que d'autres réglages les aient faits (--reuse-features keep)."),
+    ES("Se conservan los rasgos de {0} aunque los hicieron otros ajustes (--reuse-features keep)."),
+    PT("Os pontos em {0} são mantidos embora outras definições os tenham feito (--reuse-features keep)."),
+    IT("I punti in {0} si conservano anche se li hanno fatti altre impostazioni (--reuse-features keep)."),
+    NL("De kenmerken in {0} blijven, al zijn ze met andere instellingen gemaakt (--reuse-features keep)."),
+    RU("Признаки в {0} сохраняются, хотя сделаны с другими настройками (--reuse-features keep)."),
+    TR("{0} içindeki öznitelikler başka ayarlarla yapılmış olsa da korunuyor (--reuse-features keep)."));
 
 SS_MSG(extract_masks_look_inverted,
     EN("Masks dropped {0}% of all keypoints. Unless this capture is a single object "
@@ -1065,6 +1168,36 @@ SS_MSG(match_reuse_failed,
     NL("De koppelingen van een eerdere run waren onleesbaar ({0}); opnieuw koppelen."),
     RU("Не удалось прочитать сопоставления прошлого запуска ({0}); сопоставляем заново."),
     TR("Önceki çalıştırmanın eşlemeleri okunamadı ({0}); yeniden eşleniyor."));
+
+SS_MSG(match_kept_other_settings,
+    EN("Keeping the matches in {0} although other settings made them (--reuse-matches keep)."),
+    JA("{0} の照合結果は別の設定で作られていますが、そのまま使います（--reuse-matches keep）。"),
+    ZH_HANS("{0} 里的匹配结果是用别的设置做的，仍然沿用（--reuse-matches keep）。"),
+    ZH_HANT("{0} 裡的匹配結果是用別的設定做的，仍然沿用（--reuse-matches keep）。"),
+    KO("{0} 의 정합 결과는 다른 설정으로 만든 것이지만 그대로 씁니다（--reuse-matches keep）."),
+    DE("Die Paare in {0} werden behalten, obwohl andere Einstellungen sie erzeugt haben (--reuse-matches keep)."),
+    FR("Les appariements de {0} sont conservés bien que d'autres réglages les aient faits (--reuse-matches keep)."),
+    ES("Se conservan los emparejamientos de {0} aunque los hicieron otros ajustes (--reuse-matches keep)."),
+    PT("Os pareamentos em {0} são mantidos embora outras definições os tenham feito (--reuse-matches keep)."),
+    IT("Gli abbinamenti in {0} si conservano anche se li hanno fatti altre impostazioni (--reuse-matches keep)."),
+    NL("De koppelingen in {0} blijven, al zijn ze met andere instellingen gemaakt (--reuse-matches keep)."),
+    RU("Сопоставления в {0} сохраняются, хотя сделаны с другими настройками (--reuse-matches keep)."),
+    TR("{0} içindeki eşlemeler başka ayarlarla yapılmış olsa da korunuyor (--reuse-matches keep)."));
+
+SS_MSG(match_keep_refused,
+    EN("The matches in {0} cannot be kept: the features they index changed; matching again."),
+    JA("{0} の照合結果は使えません。参照している特徴点が変わったので、照合し直します。"),
+    ZH_HANS("{0} 里的匹配结果不能沿用：它们引用的特征变了，重新匹配。"),
+    ZH_HANT("{0} 裡的匹配結果不能沿用：它們引用的特徵變了，重新比對。"),
+    KO("{0} 의 정합 결과는 쓸 수 없습니다. 가리키는 특징점이 바뀌어 다시 정합합니다."),
+    DE("Die Paare in {0} lassen sich nicht behalten: die Merkmale, auf die sie verweisen, haben sich geändert; es wird neu gepaart."),
+    FR("Les appariements de {0} ne peuvent être conservés : les points qu'ils désignent ont changé ; on apparie à nouveau."),
+    ES("No se pueden conservar los emparejamientos de {0}: cambiaron los rasgos a los que apuntan; se emparejan de nuevo."),
+    PT("Os pareamentos em {0} não podem ser mantidos: os pontos a que se referem mudaram; pareando de novo."),
+    IT("Gli abbinamenti in {0} non si possono conservare: i punti a cui rimandano sono cambiati; si confronta di nuovo."),
+    NL("De koppelingen in {0} kunnen niet blijven: de kenmerken waarnaar ze verwijzen zijn veranderd; opnieuw koppelen."),
+    RU("Сопоставления в {0} нельзя сохранить: изменились признаки, на которые они ссылаются; сопоставляем заново."),
+    TR("{0} içindeki eşlemeler korunamaz: gösterdikleri öznitelikler değişti; yeniden eşleniyor."));
 
 SS_MSG(match_need_two,
     EN("At least 2 feature files are needed in {0}."),
@@ -1674,31 +1807,36 @@ SS_MSG(map_assembled,
 
 SS_MSG(map_finishing,
     EN("Finishing passes ({0}): split {1}, folds cut {2}, reseeded {3}, dropped {4}, "
-       "repaired by the audit {5}, dropped by the audit {6}"),
+       "repaired by the audit {5}, dropped by the audit {6}, seams welded {7}"),
     JA("仕上げ処理（{0}）: 分割 {1}、折り返しの切断 {2}、再シード {3}、除外 {4}、"
-       "監査で修復 {5}、監査で除外 {6}"),
+       "監査で修復 {5}、監査で除外 {6}、継ぎ目の結合 {7}"),
     ZH_HANS("收尾处理（{0}）: 拆分 {1}，切开折叠 {2}，重新播种 {3}，丢弃 {4}，"
-            "审查修复 {5}，审查丢弃 {6}"),
+            "审查修复 {5}，审查丢弃 {6}，接缝合并 {7}"),
     ZH_HANT("收尾處理（{0}）: 拆分 {1}，切開折疊 {2}，重新播種 {3}，丟棄 {4}，"
-            "稽核修復 {5}，稽核丟棄 {6}"),
+            "稽核修復 {5}，稽核丟棄 {6}，接縫合併 {7}"),
     KO("마무리 단계({0}): 분할 {1}, 접힘 절단 {2}, 재시드 {3}, 제외 {4}, "
-       "감사로 복구 {5}, 감사로 제외 {6}"),
+       "감사로 복구 {5}, 감사로 제외 {6}, 이음매 결합 {7}"),
     DE("Abschlussdurchgänge ({0}): geteilt {1}, Faltungen getrennt {2}, neu gesät {3}, "
-       "verworfen {4}, von der Prüfung repariert {5}, von der Prüfung verworfen {6}"),
+       "verworfen {4}, von der Prüfung repariert {5}, von der Prüfung verworfen {6}, "
+       "Nähte verschweißt {7}"),
     FR("Passes finales ({0}) : scindés {1}, plis coupés {2}, réamorcés {3}, écartés {4}, "
-       "réparés par l'audit {5}, écartés par l'audit {6}"),
+       "réparés par l'audit {5}, écartés par l'audit {6}, coutures soudées {7}"),
     ES("Pasadas finales ({0}): divididos {1}, pliegues cortados {2}, resembrados {3}, "
-       "descartados {4}, reparados por la auditoría {5}, descartados por la auditoría {6}"),
+       "descartados {4}, reparados por la auditoría {5}, descartados por la auditoría {6}, "
+       "costuras soldadas {7}"),
     PT("Passagens finais ({0}): divididos {1}, dobras cortadas {2}, ressemeados {3}, "
-       "descartados {4}, reparados pela auditoria {5}, descartados pela auditoria {6}"),
+       "descartados {4}, reparados pela auditoria {5}, descartados pela auditoria {6}, "
+       "costuras soldadas {7}"),
     IT("Passate finali ({0}): divisi {1}, pieghe tagliate {2}, riseminati {3}, scartati {4}, "
-       "riparati dall'audit {5}, scartati dall'audit {6}"),
+       "riparati dall'audit {5}, scartati dall'audit {6}, cuciture saldate {7}"),
     NL("Afrondende rondes ({0}): gesplitst {1}, vouwen doorgesneden {2}, opnieuw gezaaid {3}, "
-       "afgevallen {4}, hersteld door de controle {5}, afgevallen door de controle {6}"),
+       "afgevallen {4}, hersteld door de controle {5}, afgevallen door de controle {6}, "
+       "naden gelast {7}"),
     RU("Завершающие проходы ({0}): разделено {1}, складок разрезано {2}, пересеяно {3}, "
-       "отброшено {4}, исправлено проверкой {5}, отброшено проверкой {6}"),
+       "отброшено {4}, исправлено проверкой {5}, отброшено проверкой {6}, "
+       "сварено швов {7}"),
     TR("Bitirme geçişleri ({0}): bölünen {1}, kesilen katlanma {2}, yeniden tohumlanan {3}, "
-       "elenen {4}, denetimle onarılan {5}, denetimle elenen {6}"));
+       "elenen {4}, denetimle onarılan {5}, denetimle elenen {6}, kaynatılan dikiş {7}"));
 
 
 // ===========================================================================

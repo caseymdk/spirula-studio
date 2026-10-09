@@ -363,56 +363,72 @@ SS_MSG(save_full_checkpoint,
     RU("Сохранять точки для продолжения"),
     TR("Sürdürülebilir denetim noktaları kaydet"));
 SS_MSG(save_full_checkpoint_help,
-    EN("Also store everything needed to resume training later, not just the finished "
-       "splats. Checkpoints get much larger because they carry every splat slot "
-       "and the optimizer state. Leave off if you only want the exported splat "
-       "file."),
-    JA("仕上がったスプラットだけでなく、後で学習を再開するのに必要なものもすべ"
-       "て保存します。すべてのスプラット枠とオプティマイザの状態を持つので、チ"
-       "ェックポイントはかなり大きくなります。書き出したスプラットファイルだけ"
-       "が欲しいならオフのままにしてください。"),
-    ZH_HANS("除了训练好的泼溅，还保存以后继续训练所需的一切。检查点会大得多，"
-            "因为它包含每个泼溅槽位和优化器状态。如果只想要导出的泼溅文件，就"
-            "保持关闭。"),
-    ZH_HANT("除了訓練好的潑濺，還儲存以後繼續訓練所需的一切。檢查點會大得多，"
-            "因為它包含每個潑濺槽位和最佳化器狀態。如果只想要匯出的潑濺檔案，"
-            "就保持關閉。"),
-    KO("완성된 스플랫뿐 아니라 나중에 학습을 이어가는 데 필요한 것도 모두 저장"
-       "합니다. 모든 스플랫 자리와 옵티마이저 상태를 담기 때문에 체크포인트가"
-       " 훨씬 커집니다. 내보낸 스플랫 파일만 필요하면 꺼 두십시오."),
-    DE("Zusätzlich alles speichern, was zum späteren Fortsetzen nötig ist, nicht "
-       "nur die fertigen Splats. Checkpoints werden viel größer, weil sie jeden "
-       "Splat-Platz und den Optimiererzustand mitführen. Ausgeschaltet lassen, "
-       "wenn nur die exportierte Splat-Datei gebraucht wird."),
-    FR("Enregistrer aussi tout ce qu'il faut pour reprendre l'entraînement plus "
-       "tard, pas seulement les splats finis. Les sauvegardes deviennent bien "
-       "plus grosses car elles portent chaque emplacement de splat et l'état "
-       "de l'optimiseur. À laisser décoché si seul le fichier de splats exporté "
-       "vous intéresse."),
-    ES("Guardar además todo lo necesario para reanudar el entrenamiento más tarde, "
-       "no solo los splats terminados. Los puntos de control se vuelven mucho "
-       "mayores porque llevan cada hueco de splat y el estado del optimizador. "
-       "Déjelo sin marcar si solo quiere el archivo de splats exportado."),
-    PT("Guardar também tudo o que é preciso para retomar o treinamento depois, "
-       "não só os splats prontos. Os checkpoints ficam bem maiores porque carregam "
-       "cada posição de splat e o estado do otimizador. Deixe desmarcado se quiser "
-       "apenas o arquivo de splats exportado."),
-    IT("Salvare anche tutto ciò che serve per riprendere l'addestramento più "
-       "tardi, non solo gli splat finiti. I checkpoint diventano molto più grandi "
-       "perché portano ogni posto splat e lo stato dell'ottimizzatore. Lasciare "
-       "deselezionato se serve solo il file di splat esportato."),
-    NL("Ook alles opslaan wat nodig is om later verder te trainen, niet alleen "
-       "de afgeronde splats. Checkpoints worden veel groter omdat ze elke splatplek "
-       "en de optimizerstatus meedragen. Laat uit als je alleen het geëxporteerde "
-       "splatbestand wilt."),
-    RU("Сохранять не только готовые сплаты, но и всё, что нужно, чтобы позже "
-       "продолжить обучение. Контрольные точки становятся заметно больше, поскольку "
-       "несут каждую ячейку сплата и состояние оптимизатора. Оставьте выключенным, "
-       "если нужен только выгруженный файл сплатов."),
-    TR("Yalnızca bitmiş splat'ları değil, sonradan eğitimi sürdürmek için gereken "
-       "her şeyi de kaydeder. Denetim noktaları çok daha büyür, çünkü her splat "
-       "yuvasını ve iyileştirici durumunu taşırlar. Yalnızca dışa aktarılmış "
-       "splat dosyasını istiyorsanız kapalı bırakın."));
+    EN("Store what training needs to continue in every checkpoint, the final one "
+       "and any older ones kept included. Without it, the newest checkpoint still "
+       "continues an interrupted run while only the newest is kept. Resumable "
+       "checkpoints are much larger because they carry every splat slot and the "
+       "optimizer state."),
+    JA("学習を続けるのに必要なものを、最後のものや残しておく古いものも含め、すべ"
+       "てのチェックポイントに保存します。オフでも、最新のチェックポイントだけを"
+       "残す設定なら、中断した学習はその最新のものから続けられます。再開できるチ"
+       "ェックポイントは、すべてのスプラット枠とオプティマイザの状態を持つので、"
+       "かなり大きくなります。"),
+    ZH_HANS("在每个检查点中都保存继续训练所需的一切，包括最后一个以及保留下来的旧"
+            "检查点。关闭时，只要设为只保留最新的检查点，中断的训练仍可从这个最新"
+            "检查点继续。可继续训练的检查点包含每个泼溅槽位和优化器状态，因此会大"
+            "得多。"),
+    ZH_HANT("在每個檢查點中都儲存繼續訓練所需的一切，包括最後一個以及保留下來的舊"
+            "檢查點。關閉時，只要設為只保留最新的檢查點，中斷的訓練仍可從這個最新"
+            "檢查點繼續。可繼續訓練的檢查點包含每個潑濺槽位和最佳化器狀態，因此會"
+            "大得多。"),
+    KO("학습을 이어가는 데 필요한 것을 마지막 체크포인트와 보관하는 이전 체크포"
+       "인트까지 모든 체크포인트에 저장합니다. 꺼 두어도 가장 최근 체크포인트만 "
+       "보관하는 동안에는 중단된 학습을 그 체크포인트에서 이어갈 수 있습니다. "
+       "이어할 수 있는 체크포인트는 모든 스플랫 자리와 옵티마이저 상태를 담기 "
+       "때문에 훨씬 커집니다."),
+    DE("Speichert in jedem Checkpoint, was zum Weitertrainieren nötig ist, auch im "
+       "letzten und in jedem aufbewahrten älteren. Ohne diese Option setzt der "
+       "neueste Checkpoint einen abgebrochenen Lauf trotzdem fort, solange nur der "
+       "neueste aufbewahrt wird. Fortsetzbare Checkpoints sind viel größer, weil "
+       "sie jeden Splat-Platz und den Optimiererzustand mitführen."),
+    FR("Enregistre dans chaque sauvegarde ce qu'il faut pour poursuivre "
+       "l'entraînement, y compris la dernière et les plus anciennes conservées. "
+       "Sans cette option, la sauvegarde la plus récente permet quand même de "
+       "reprendre une exécution interrompue tant que seule la plus récente est "
+       "conservée. Les sauvegardes reprenables sont bien plus grosses car elles "
+       "portent chaque emplacement de splat et l'état de l'optimiseur."),
+    ES("Guarda en cada punto de control lo necesario para seguir entrenando, "
+       "incluidos el último y los anteriores que se conserven. Sin esta opción, el "
+       "punto de control más reciente igualmente permite continuar una ejecución "
+       "interrumpida mientras solo se conserve el más reciente. Los puntos de "
+       "control reanudables son mucho mayores porque llevan cada hueco de splat y "
+       "el estado del optimizador."),
+    PT("Guarda em cada checkpoint o que é preciso para continuar o treinamento, "
+       "incluindo o último e os anteriores que forem mantidos. Sem esta opção, o "
+       "checkpoint mais recente ainda permite retomar uma execução interrompida "
+       "enquanto apenas o mais recente for mantido. Checkpoints retomáveis ficam "
+       "bem maiores porque carregam cada posição de splat e o estado do otimizador."),
+    IT("Salva in ogni checkpoint ciò che serve per continuare l'addestramento, "
+       "compresi l'ultimo e quelli precedenti conservati. Senza questa opzione, il "
+       "checkpoint più recente permette comunque di riprendere un'esecuzione "
+       "interrotta finché si conserva solo il più recente. I checkpoint "
+       "riprendibili sono molto più grandi perché portano ogni posto splat e lo "
+       "stato dell'ottimizzatore."),
+    NL("Slaat in elk checkpoint op wat nodig is om verder te trainen, ook in het "
+       "laatste en in elk bewaard ouder checkpoint. Zonder deze optie hervat het "
+       "nieuwste checkpoint een onderbroken run toch, zolang alleen het nieuwste "
+       "wordt bewaard. Hervatbare checkpoints zijn veel groter omdat ze elke "
+       "splatplek en de optimizerstatus meedragen."),
+    RU("Сохранять во всех контрольных точках всё, что нужно для продолжения "
+       "обучения, включая последнюю и сохраняемые более ранние. Без этого "
+       "прерванный запуск всё равно можно продолжить с последней точки, пока "
+       "хранится только последняя. Такие точки заметно больше, поскольку несут "
+       "каждую ячейку сплата и состояние оптимизатора."),
+    TR("Eğitime devam etmek için gerekenleri, son denetim noktası ve saklanan "
+       "eskiler de dahil olmak üzere her denetim noktasına kaydeder. Kapalıyken de "
+       "yalnızca en yeni denetim noktası saklandığı sürece yarıda kalan bir "
+       "çalışma o noktadan sürdürülebilir. Sürdürülebilir denetim noktaları her "
+       "splat yuvasını ve iyileştirici durumunu taşıdığı için çok daha büyüktür."));
 
 SS_MSG(save_eval_images,
     EN("Save evaluation images"), JA("評価用画像を保存"),
@@ -458,6 +474,35 @@ SS_MSG(save_eval_images_help,
     TR("Eğitim bitince, ayrılmış görünümler için çizilen ve kaynak görüntüleri "
        "yazar. Kaliteyi değerlendirmek için işe yarar, karşılığında biraz disk "
        "yeri harcar."));
+
+SS_MSG(log_performance,
+    EN("Log performance stats"),
+    JA("性能の統計を記録"),
+    ZH_HANS("记录性能统计"),
+    ZH_HANT("記錄效能統計"),
+    KO("성능 통계 기록"),
+    DE("Leistungsdaten protokollieren"),
+    FR("Journaliser les statistiques de performance"),
+    ES("Registrar estadísticas de rendimiento"),
+    PT("Registrar estatísticas de desempenho"),
+    IT("Registra le statistiche delle prestazioni"),
+    NL("Prestatiestatistieken vastleggen"),
+    RU("Записывать статистику производительности"),
+    TR("Performans istatistiklerini kaydet"));
+SS_MSG(log_performance_help,
+    EN("Records the computer and the run once a second while it trains: CPU use per core, memory, disk, GPU use, clocks and temperature, and how long each step waited for images versus ran on the GPU. The files go to the run's perf folder; python tools/perf/perf_report.py with that folder turns them into a report of what limited each stage. Costs a small fraction of one CPU core."),
+    JA("学習中、1 秒ごとにコンピューターと実行の状態を記録します。コアごとの CPU 使用率、メモリ、ディスク、GPU 使用率、クロック、温度、そして各ステップが画像を待った時間と GPU で動いた時間です。ファイルは実行フォルダーの perf に保存されます。そのフォルダーを指定して python tools/perf/perf_report.py を実行すると、各段階の制約要因をまとめたレポートになります。CPU コア 1 つのごく一部しか使いません。"),
+    ZH_HANS("训练时每秒记录一次计算机和本次运行的状态：每个核心的 CPU 占用、内存、磁盘、GPU 占用、频率和温度，以及每一步等待图像与在 GPU 上运行各花了多长时间。文件保存在运行文件夹的 perf 中；用该文件夹运行 python tools/perf/perf_report.py，可生成说明每个阶段受什么限制的报告。只占用一个 CPU 核心的很小一部分。"),
+    ZH_HANT("訓練時每秒記錄一次電腦與本次執行的狀態：每個核心的 CPU 使用率、記憶體、磁碟、GPU 使用率、時脈與溫度，以及每一步等待影像與在 GPU 上執行各花了多久。檔案存放在執行資料夾的 perf 中；以該資料夾執行 python tools/perf/perf_report.py，可產生說明每個階段受什麼限制的報告。只佔用一個 CPU 核心的很小一部分。"),
+    KO("학습하는 동안 1초마다 컴퓨터와 실행 상태를 기록합니다. 코어별 CPU 사용률, 메모리, 디스크, GPU 사용률, 클럭과 온도, 그리고 각 스텝이 이미지를 기다린 시간과 GPU에서 실행된 시간입니다. 파일은 실행 폴더의 perf에 저장됩니다. 그 폴더로 python tools/perf/perf_report.py를 실행하면 각 단계를 무엇이 제한했는지 보여 주는 보고서가 됩니다. CPU 코어 하나의 아주 작은 일부만 씁니다."),
+    DE("Zeichnet während des Trainings einmal pro Sekunde Rechner und Lauf auf: CPU-Last je Kern, Arbeitsspeicher, Datenträger, GPU-Last, Takt und Temperatur sowie, wie lange jeder Schritt auf Bilder gewartet und wie lange er auf der GPU gerechnet hat. Die Dateien landen im Ordner perf des Laufs; python tools/perf/perf_report.py mit diesem Ordner macht daraus einen Bericht, was jede Stufe gebremst hat. Kostet einen kleinen Bruchteil eines CPU-Kerns."),
+    FR("Enregistre l'ordinateur et l'exécution une fois par seconde pendant l'entraînement : charge CPU par cœur, mémoire, disque, charge GPU, fréquences et température, et le temps que chaque étape a passé à attendre les images ou à calculer sur le GPU. Les fichiers vont dans le dossier perf de l'exécution ; python tools/perf/perf_report.py avec ce dossier en fait un rapport sur ce qui a limité chaque étape. Coûte une petite fraction d'un cœur CPU."),
+    ES("Registra el equipo y la ejecución una vez por segundo mientras entrena: uso de CPU por núcleo, memoria, disco, uso de GPU, frecuencias y temperatura, y cuánto tiempo cada paso esperó imágenes frente a cuánto se ejecutó en la GPU. Los archivos van a la carpeta perf de la ejecución; python tools/perf/perf_report.py con esa carpeta los convierte en un informe de qué limitó cada etapa. Cuesta una pequeña fracción de un núcleo de CPU."),
+    PT("Registra o computador e a execução uma vez por segundo durante o treinamento: uso de CPU por núcleo, memória, disco, uso de GPU, frequências e temperatura, e quanto tempo cada passo esperou por imagens e quanto rodou na GPU. Os arquivos vão para a pasta perf da execução; python tools/perf/perf_report.py com essa pasta gera um relatório do que limitou cada etapa. Custa uma pequena fração de um núcleo de CPU."),
+    IT("Registra il computer e l'esecuzione una volta al secondo durante l'addestramento: uso della CPU per core, memoria, disco, uso della GPU, frequenze e temperatura, e quanto tempo ogni passo ha atteso le immagini rispetto a quanto ha lavorato sulla GPU. I file vanno nella cartella perf dell'esecuzione; python tools/perf/perf_report.py con quella cartella li trasforma in un rapporto su cosa ha limitato ogni fase. Costa una piccola frazione di un core della CPU."),
+    NL("Legt tijdens de training elke seconde de computer en de run vast: CPU-gebruik per kern, geheugen, schijf, GPU-gebruik, kloksnelheden en temperatuur, en hoe lang elke stap op beelden wachtte tegenover hoe lang hij op de GPU rekende. De bestanden komen in de map perf van de run; python tools/perf/perf_report.py met die map maakt er een rapport van over wat elke fase beperkte. Kost een klein deel van één CPU-kern."),
+    RU("Во время обучения раз в секунду записывает состояние компьютера и запуска: загрузку CPU по ядрам, память, диск, загрузку GPU, частоты и температуру, а также сколько времени каждый шаг ждал изображений и сколько работал на GPU. Файлы сохраняются в папку perf запуска; python tools/perf/perf_report.py с этой папкой превращает их в отчёт о том, что ограничивало каждый этап. Занимает малую долю одного ядра CPU."),
+    TR("Eğitim sürerken bilgisayarı ve çalıştırmayı saniyede bir kaydeder: çekirdek başına CPU kullanımı, bellek, disk, GPU kullanımı, saat hızları ve sıcaklık, ayrıca her adımın görüntü beklediği süre ile GPU'da çalıştığı süre. Dosyalar çalıştırmanın perf klasörüne yazılır; o klasörle python tools/perf/perf_report.py çalıştırıldığında her aşamayı neyin sınırladığını gösteren bir rapor çıkar. Tek bir CPU çekirdeğinin küçük bir kısmını harcar."));
 
 SS_MSG(viewer_port,
     EN("Web viewer port"), JA("Web ビューアのポート"),
@@ -753,74 +798,87 @@ SS_MSG(apply_loss_for_mask_help,
        "or the black area outside a fisheye circle. On trains them as empty, "
        "which removes the background and leaves just the subject. Left unset, "
        "it is on when the only masks are the images' own alpha channel, and "
-       "off otherwise."),
+       "off otherwise. "
+       "Dense point-cloud seeds also default to cut out."),
     JA("マスクされた画素を無視するか、空として学習するかを決めます。オフなら"
        "無視され、通行人や車、魚眼の円外の黒い部分といった邪魔物を隠すのに使"
        "えます。オンなら空として学習され、背景が取り除かれて被写体だけが残り"
        "ます。未設定なら、マスクが画像自身のアルファチャンネルだけのときにオ"
-       "ン、それ以外はオフになります。"),
+       "ン、それ以外はオフになります。 "
+       "密な点群を初期値に使う場合も、既定は切り抜きです。"),
     ZH_HANS("被遮住的像素是忽略还是按空白训练。关闭时忽略它们，可用来隐藏行人、"
             "汽车、鱼眼圆外的黑边等干扰物。开启时按空白训练，会去掉背景，只留"
             "下主体。未设置时，若蒙版只有图像自身的 Alpha 通道则开启，否则关"
-            "闭。"),
+            "闭。 "
+       "使用稠密点云初始化时也默认裁掉背景。"),
     ZH_HANT("被遮住的像素是忽略還是按空白訓練。關閉時忽略它們，可用來隱藏行人、"
             "汽車、魚眼圓外的黑邊等干擾物。開啟時按空白訓練，會去掉背景，只留"
             "下主體。未設定時，若遮罩只有影像自身的 Alpha 通道則開啟，否則關"
-            "閉。"),
+            "閉。 "
+       "使用稠密點雲初始化時也預設裁掉背景。"),
     KO("가려진 픽셀을 무시할지, 빈 공간으로 학습할지 정합니다. 끄면 무시하므"
        "로 사람, 자동차, 어안 원 바깥의 검은 영역 같은 방해물을 가리는 데 쓸 "
        "수 있습니다. 켜면 빈 곳으로 학습해 배경이 사라지고 피사체만 남습니다."
        " 설정하지 않으면 마스크가 이미지 자체의 알파 채널뿐일 때 켜지고, 그 "
-       "밖에는 꺼집니다."),
+       "밖에는 꺼집니다. "
+       "밀집 포인트 클라우드로 초기화할 때도 기본값은 배경 잘라내기입니다."),
     DE("Ob maskierte Pixel ignoriert oder als leerer Raum trainiert werden. "
        "Aus ignoriert sie, womit sich Störendes wie Passanten, Autos oder der "
        "schwarze Bereich außerhalb des Fischaugenkreises ausblenden lässt. An "
        "trainiert sie als leer, was den Hintergrund entfernt und nur das Motiv "
        "übrig lässt. Ungesetzt ist es an, wenn die einzigen Masken der "
-       "Alphakanal der Bilder selbst sind, sonst aus."),
+       "Alphakanal der Bilder selbst sind, sonst aus. "
+       "Bei einer dichten Startpunktwolke ist Ausschneiden ebenfalls die Vorgabe."),
     FR("Les pixels masqués sont-ils ignorés ou entraînés comme du vide. "
        "Décoché, ils sont ignorés, ce qui permet de cacher les gêneurs : "
        "passants, voitures, ou la zone noire hors du cercle fisheye. Coché, "
        "ils sont entraînés comme vides, ce qui supprime l'arrière-plan et ne "
        "laisse que le sujet. Non défini, il est coché quand les seuls masques "
-       "sont le canal alpha des images elles-mêmes, décoché sinon."),
+       "sont le canal alpha des images elles-mêmes, décoché sinon. "
+       "Les nuages denses utilisés pour initialiser choisissent aussi le détourage par défaut."),
     ES("Si los píxeles enmascarados se ignoran o se entrenan como espacio "
        "vacío. Desactivado los ignora, que es como se ocultan elementos "
        "molestos: transeúntes, coches o la zona negra fuera del círculo de ojo "
        "de pez. Activado los entrena como vacíos, lo que elimina el fondo y "
        "deja solo el sujeto. Sin definir, se activa cuando las únicas máscaras "
-       "son el canal alfa de las propias imágenes, y se desactiva en otro caso."),
+       "son el canal alfa de las propias imágenes, y se desactiva en otro caso. "
+       "La inicialización con nube densa también recorta por defecto."),
     PT("Se os pixels mascarados são ignorados ou treinados como espaço vazio. "
        "Desligado os ignora, que é como se escondem elementos indesejados: "
        "pessoas, carros ou a área preta fora do círculo olho de peixe. Ligado "
        "os treina como vazios, o que remove o fundo e deixa só o sujeito. Sem "
        "valor definido, fica ligado quando as únicas máscaras são o canal alfa "
-       "das próprias imagens, e desligado caso contrário."),
+       "das próprias imagens, e desligado caso contrário. "
+       "A inicialização com nuvem densa também recorta por padrão."),
     IT("Se i pixel mascherati vengono ignorati o addestrati come spazio vuoto. "
        "Disattivato li ignora, ed è così che si nascondono gli elementi di "
        "disturbo: passanti, automobili o l'area nera fuori dal cerchio "
        "fisheye. Attivato li addestra come vuoti, il che rimuove lo sfondo e "
        "lascia solo il soggetto. Se non impostato, è attivo quando le uniche "
        "maschere sono il canale alfa delle immagini stesse, altrimenti è "
-       "disattivato."),
+       "disattivato. "
+       "Anche l’inizializzazione con nuvola densa usa il ritaglio come predefinito."),
     NL("Of gemaskeerde pixels worden genegeerd of als lege ruimte getraind. "
        "Uit negeert ze, waarmee je stoorelementen verbergt: voorbijgangers, "
        "auto's of het zwarte gebied buiten de fisheye-cirkel. Aan traint ze "
        "als leeg, waardoor de achtergrond verdwijnt en alleen het onderwerp "
        "overblijft. Niet ingesteld staat het aan als de enige maskers het "
-       "alfakanaal van de beelden zelf zijn, en anders uit."),
+       "alfakanaal van de beelden zelf zijn, en anders uit. "
+       "Initialisatie met een dichte puntenwolk kiest standaard ook uitsnijden."),
     RU("Игнорировать закрытые маской пиксели или обучать их как пустоту. "
        "Выключено — игнорирует; так скрывают помехи: прохожих, машины, чёрную "
        "область вне круга фишая. Включено — обучает как пустоту, что убирает "
        "фон и оставляет только объект. Если не задано, включено, когда "
        "единственные маски — альфа-канал самих изображений, и выключено в "
-       "остальных случаях."),
+       "остальных случаях. "
+       "При инициализации плотным облаком по умолчанию также вырезается фон."),
     TR("Maskelenen piksellerin yok sayılması mı yoksa boş alan olarak "
        "eğitilmesi mi. Kapalıyken yok sayılır; geçen insanlar, arabalar ya da "
        "balıkgözü dairesinin dışındaki siyah alan gibi istenmeyenler böyle "
        "gizlenir. Açıkken boş olarak eğitilir; arka plan kalkar ve yalnızca "
        "özne kalır. Ayarlanmazsa, tek maske görüntülerin kendi alfa kanalı "
-       "olduğunda açık, aksi hâlde kapalıdır."));
+       "olduğunda açık, aksi hâlde kapalıdır. "
+       "Yoğun nokta bulutuyla başlatmada da varsayılan arka planı kesmektir."));
 
 SS_MSG(flip_mask,
     EN("Flip masks"), JA("マスクを反転"),
@@ -1346,6 +1404,300 @@ SS_MSG(train_resolution_divisor_help,
        "eğitir. Kameralar her zaman görüntü dosyalarını izler, bu yüzden "
        "önceden küçültülmüş bir görüntü klasörü burada çarpan istemez."));
 
+SS_MSG(progressive_resolution,
+    EN("Progressive resolution"),
+    JA("段階的な解像度"),
+    ZH_HANS("渐进分辨率"),
+    ZH_HANT("漸進解析度"),
+    KO("점진적 해상도"),
+    DE("Schrittweise Auflösung"),
+    FR("Résolution progressive"),
+    ES("Resolución progresiva"),
+    PT("Resolução progressiva"),
+    IT("Risoluzione progressiva"),
+    NL("Oplopende resolutie"),
+    RU("Постепенное разрешение"),
+    TR("Kademeli çözünürlük"));
+SS_MSG(progressive_resolution_help,
+    EN("Start training on smaller images and step up to full resolution as the run goes on, which settles the coarse shape sooner and with cheaper steps. Resolution only changes between full passes over the dataset, so every image is trained the same number of times at each size. Off trains at full resolution throughout."),
+    JA("小さい画像で学習を始め、進むにつれて元の解像度まで上げます。安いステップで大まかな形を早く固められます。解像度はデータセットを一巡するごとの区切りでのみ変わるため、どの画像も各解像度で同じ回数だけ学習されます。オフなら最初から最後まで元の解像度で学習します。"),
+    ZH_HANS("先用较小的图像开始训练，随着进行逐步提高到完整分辨率，以更低的单步成本更早确定大致形状。分辨率只在完整遍历一次数据集后才改变，因此每张图像在每种尺寸下训练的次数相同。关闭时全程以完整分辨率训练。"),
+    ZH_HANT("先用較小的影像開始訓練，隨著進行逐步提高到完整解析度，以更低的單步成本更早確定大致形狀。解析度只在完整走過一次資料集後才改變，因此每張影像在每種尺寸下訓練的次數相同。關閉時全程以完整解析度訓練。"),
+    KO("작은 이미지로 학습을 시작해 진행에 따라 원래 해상도까지 올립니다. 저렴한 스텝으로 대략적인 형태를 더 빨리 잡습니다. 해상도는 데이터셋을 한 바퀴 다 돈 뒤에만 바뀌므로 모든 이미지가 각 크기에서 같은 횟수만큼 학습됩니다. 끄면 처음부터 끝까지 원래 해상도로 학습합니다."),
+    DE("Das Training mit kleineren Bildern beginnen und im Verlauf bis zur vollen Auflösung steigern; so steht die grobe Form früher und mit günstigeren Schritten. Die Auflösung wechselt nur zwischen vollständigen Durchläufen des Datensatzes, daher wird jedes Bild in jeder Größe gleich oft trainiert. Aus trainiert durchgehend in voller Auflösung."),
+    FR("Commencer l'entraînement sur des images plus petites et monter jusqu'à la pleine résolution au fil du run, ce qui fixe plus tôt la forme générale avec des étapes moins coûteuses. La résolution ne change qu'entre deux passages complets sur le jeu de données, donc chaque image est entraînée autant de fois à chaque taille. Désactivé, tout se fait en pleine résolution."),
+    ES("Empezar el entrenamiento con imágenes más pequeñas y subir a la resolución completa a medida que avanza, lo que fija antes la forma general con pasos más baratos. La resolución solo cambia entre pasadas completas por el conjunto de datos, así que cada imagen se entrena las mismas veces en cada tamaño. Desactivado, se entrena siempre a resolución completa."),
+    PT("Começar o treinamento com imagens menores e subir até a resolução completa ao longo do processo, o que define antes a forma geral com passos mais baratos. A resolução só muda entre passagens completas pelo conjunto de dados, então cada imagem é treinada o mesmo número de vezes em cada tamanho. Desligado, treina sempre em resolução completa."),
+    IT("Iniziare l'addestramento su immagini più piccole e salire fino alla risoluzione piena man mano che procede, così la forma generale si assesta prima e con passi più economici. La risoluzione cambia solo tra un passaggio completo e l'altro sul set di dati, quindi ogni immagine viene addestrata lo stesso numero di volte a ogni dimensione. Disattivato, si addestra sempre a risoluzione piena."),
+    NL("De training met kleinere beelden beginnen en gaandeweg opschalen naar volle resolutie, zodat de grove vorm eerder en met goedkopere stappen vastligt. De resolutie verandert alleen tussen volledige rondes door de dataset, dus elk beeld wordt op elke grootte even vaak getraind. Uit traint de hele tijd op volle resolutie."),
+    RU("Начинать обучение на уменьшенных изображениях и по ходу повышать разрешение до полного: грубая форма устанавливается раньше и более дешёвыми шагами. Разрешение меняется только между полными проходами по набору данных, поэтому каждое изображение обучается одинаковое число раз на каждом размере. Если выключено, всё обучение идёт в полном разрешении."),
+    TR("Eğitime daha küçük görüntülerle başlar ve ilerledikçe tam çözünürlüğe çıkar; kaba biçim daha ucuz adımlarla daha erken oturur. Çözünürlük yalnızca veri kümesi üzerinden tam bir geçiş bittiğinde değişir, böylece her görüntü her boyutta aynı sayıda eğitilir. Kapalıyken baştan sona tam çözünürlükte eğitir."));
+SS_MSG(progressive_resolution_start,
+    EN("Starting resolution divisor"),
+    JA("開始時の解像度の分母"),
+    ZH_HANS("起始分辨率缩小倍数"),
+    ZH_HANT("起始解析度縮小倍數"),
+    KO("시작 해상도 축소 배수"),
+    DE("Anfänglicher Auflösungsteiler"),
+    FR("Diviseur de résolution de départ"),
+    ES("Divisor de resolución inicial"),
+    PT("Divisor de resolução inicial"),
+    IT("Divisore di risoluzione iniziale"),
+    NL("Begindeler van de resolutie"),
+    RU("Начальный делитель разрешения"),
+    TR("Başlangıç çözünürlük böleni"));
+SS_MSG(progressive_resolution_start_help,
+    EN("How much smaller the first stage trains: 4 starts at a quarter of each side, then the divisor halves stage by stage (4, 2, full). A power of two, at least 2. It applies on top of the training resolution divisor."),
+    JA("最初の段階をどれだけ小さくするかです。4 なら各辺 4 分の 1 から始め、段階ごとに分母が半分になります（4、2、元の解像度）。2 以上の 2 のべき乗です。学習解像度の分母に重ねて掛かります。"),
+    ZH_HANS("第一阶段缩小多少：4 表示每边从四分之一开始，之后每个阶段倍数减半（4、2、完整）。须为不小于 2 的 2 的幂。在训练分辨率缩小倍数之上再叠加。"),
+    ZH_HANT("第一階段縮小多少：4 表示每邊從四分之一開始，之後每個階段倍數減半（4、2、完整）。須為不小於 2 的 2 的冪。在訓練解析度縮小倍數之上再疊加。"),
+    KO("첫 단계를 얼마나 작게 학습할지입니다. 4면 각 변의 4분의 1에서 시작하고 단계마다 배수가 절반이 됩니다(4, 2, 원래 크기). 2 이상인 2의 거듭제곱입니다. 학습 해상도 축소 배수에 겹쳐 적용됩니다."),
+    DE("Wie viel kleiner die erste Stufe trainiert: 4 beginnt mit einem Viertel jeder Seite, danach halbiert sich der Teiler von Stufe zu Stufe (4, 2, voll). Eine Zweierpotenz ab 2. Wirkt zusätzlich zum Teiler der Trainingsauflösung."),
+    FR("De combien la première étape est réduite : 4 commence au quart de chaque côté, puis le diviseur est divisé par deux à chaque étape (4, 2, pleine). Une puissance de deux, au moins 2. S'ajoute au diviseur de la résolution d'entraînement."),
+    ES("Cuánto más pequeña entrena la primera etapa: 4 empieza en un cuarto de cada lado y el divisor se reduce a la mitad en cada etapa (4, 2, completa). Una potencia de dos, al menos 2. Se aplica además del divisor de la resolución de entrenamiento."),
+    PT("Quanto menor é a primeira etapa: 4 começa com um quarto de cada lado e o divisor cai pela metade a cada etapa (4, 2, completa). Uma potência de dois, no mínimo 2. Aplica-se além do divisor da resolução de treino."),
+    IT("Quanto più piccola addestra la prima fase: 4 parte da un quarto di ogni lato, poi il divisore si dimezza a ogni fase (4, 2, piena). Una potenza di due, almeno 2. Si somma al divisore della risoluzione di addestramento."),
+    NL("Hoeveel kleiner de eerste fase traint: 4 begint op een kwart van elke zijde, daarna halveert de deler per fase (4, 2, vol). Een macht van twee, minstens 2. Komt bovenop de deler van de trainingsresolutie."),
+    RU("Насколько меньше первый этап: 4 начинает с четверти каждой стороны, затем делитель уменьшается вдвое на каждом этапе (4, 2, полное). Степень двойки, не меньше 2. Применяется поверх делителя разрешения обучения."),
+    TR("İlk aşamanın ne kadar küçük eğitileceği: 4 her kenarın dörtte birinden başlar, sonra bölen her aşamada yarıya iner (4, 2, tam). En az 2 olan bir ikinin kuvveti. Eğitim çözünürlüğü böleninin üstüne uygulanır."));
+SS_MSG(progressive_resolution_full_at,
+    EN("Full resolution from"),
+    JA("元の解像度に達する時点"),
+    ZH_HANS("达到完整分辨率的时机"),
+    ZH_HANT("達到完整解析度的時機"),
+    KO("원래 해상도 도달 시점"),
+    DE("Volle Auflösung ab"),
+    FR("Pleine résolution à partir de"),
+    ES("Resolución completa desde"),
+    PT("Resolução completa a partir de"),
+    IT("Risoluzione piena da"),
+    NL("Volle resolutie vanaf"),
+    RU("Полное разрешение с"),
+    TR("Tam çözünürlük başlangıcı"));
+SS_MSG(progressive_resolution_full_at_help,
+    EN("The fraction of the run by which training reaches full resolution: 0.3 is after 30% of the steps. Each earlier stage is half as long as the one after it, since a finer step costs about four times as much. Switches snap to the nearest full pass over the dataset."),
+    JA("学習が元の解像度に達するまでの割合です。0.3 ならステップの 30% の後です。細かいステップは約 4 倍のコストがかかるため、前の段階ほど後の段階の半分の長さになります。切り替えはデータセットの一巡の区切りに最も近い位置に合わせます。"),
+    ZH_HANS("训练达到完整分辨率时所占的进度比例：0.3 表示 30% 的步数之后。由于更精细的一步成本约为四倍，每个较早阶段的长度是其后一阶段的一半。切换会对齐到最近的一次完整遍历数据集。"),
+    ZH_HANT("訓練達到完整解析度時所占的進度比例：0.3 表示 30% 的步數之後。由於更精細的一步成本約為四倍，每個較早階段的長度是其後一階段的一半。切換會對齊到最近的一次完整走過資料集。"),
+    KO("학습이 원래 해상도에 도달하는 진행 비율입니다. 0.3이면 스텝의 30% 이후입니다. 더 세밀한 스텝은 약 4배 비싸므로 앞 단계는 다음 단계의 절반 길이입니다. 전환은 데이터셋 한 바퀴의 가장 가까운 경계에 맞춥니다."),
+    DE("Der Anteil des Laufs, nach dem das Training die volle Auflösung erreicht: 0.3 heißt nach 30 % der Schritte. Jede frühere Stufe ist halb so lang wie die folgende, da ein feinerer Schritt etwa viermal so viel kostet. Wechsel rasten am nächsten vollständigen Durchlauf des Datensatzes ein."),
+    FR("La part du run après laquelle l'entraînement atteint la pleine résolution : 0.3 signifie après 30 % des étapes. Chaque étape précédente dure la moitié de la suivante, car une étape plus fine coûte environ quatre fois plus. Les changements s'alignent sur le passage complet le plus proche du jeu de données."),
+    ES("La fracción de la ejecución en la que el entrenamiento alcanza la resolución completa: 0.3 es tras el 30 % de los pasos. Cada etapa anterior dura la mitad que la siguiente, porque un paso más fino cuesta unas cuatro veces más. Los cambios se ajustan a la pasada completa por el conjunto de datos más cercana."),
+    PT("A fração do treino em que se chega à resolução completa: 0.3 é após 30% dos passos. Cada etapa anterior dura metade da seguinte, porque um passo mais fino custa cerca de quatro vezes mais. As mudanças se alinham à passagem completa pelo conjunto de dados mais próxima."),
+    IT("La frazione del run entro cui l'addestramento raggiunge la risoluzione piena: 0.3 significa dopo il 30% dei passi. Ogni fase precedente dura la metà della successiva, perché un passo più fine costa circa quattro volte tanto. I cambi si allineano al passaggio completo sul set di dati più vicino."),
+    NL("Het deel van de run waarna de training volle resolutie bereikt: 0.3 is na 30% van de stappen. Elke eerdere fase duurt half zo lang als de volgende, omdat een fijnere stap ongeveer vier keer zoveel kost. Wisselingen vallen samen met de dichtstbijzijnde volledige ronde door de dataset."),
+    RU("Доля запуска, к которой обучение выходит на полное разрешение: 0.3 — после 30% шагов. Каждый предыдущий этап вдвое короче следующего, поскольку более мелкий шаг стоит примерно вчетверо дороже. Переключения привязываются к ближайшему полному проходу по набору данных."),
+    TR("Eğitimin tam çözünürlüğe ulaştığı çalıştırma oranı: 0.3, adımların %30'undan sonra demektir. Daha ince bir adım yaklaşık dört kat pahalı olduğundan her önceki aşama sonrakinin yarısı kadar sürer. Geçişler veri kümesi üzerindeki en yakın tam geçişe hizalanır."));
+SS_MSG(progressive_resolution_schedule,
+    EN("Manual resolution schedule"),
+    JA("手動の解像度スケジュール"),
+    ZH_HANS("手动分辨率计划"),
+    ZH_HANT("手動解析度計畫"),
+    KO("수동 해상도 일정"),
+    DE("Manueller Auflösungsplan"),
+    FR("Calendrier de résolution manuel"),
+    ES("Calendario de resolución manual"),
+    PT("Cronograma de resolução manual"),
+    IT("Calendario di risoluzione manuale"),
+    NL("Handmatig resolutieschema"),
+    RU("Ручное расписание разрешения"),
+    TR("Elle çözünürlük planı"));
+SS_MSG(progressive_resolution_schedule_help,
+    EN("Replaces the automatic stages with your own: step:divisor pairs, for example 0:4, 3000:2, 9000:1. Divisors may only shrink. Each switch moves to the nearest full pass over the dataset. Empty uses the automatic schedule."),
+    JA("自動の段階を自分の設定に置き換えます。ステップ:分母 の組で、例えば 0:4, 3000:2, 9000:1 です。分母は小さくなる方向にしか変えられません。各切り替えはデータセットの一巡の最も近い区切りに移ります。空なら自動のスケジュールを使います。"),
+    ZH_HANS("用自定义阶段替换自动阶段：步数:倍数 组成的对，例如 0:4, 3000:2, 9000:1。倍数只能逐渐减小。每次切换会移到最近的一次完整遍历数据集。留空则使用自动计划。"),
+    ZH_HANT("用自訂階段取代自動階段：步數:倍數 組成的對，例如 0:4, 3000:2, 9000:1。倍數只能逐漸減小。每次切換會移到最近的一次完整走過資料集。留空則使用自動計畫。"),
+    KO("자동 단계를 직접 정한 단계로 바꿉니다. 스텝:배수 쌍으로, 예: 0:4, 3000:2, 9000:1. 배수는 줄어드는 방향으로만 바꿀 수 있습니다. 각 전환은 데이터셋 한 바퀴의 가장 가까운 경계로 옮겨집니다. 비워 두면 자동 일정을 씁니다."),
+    DE("Ersetzt die automatischen Stufen durch eigene: Paare aus Schritt:Teiler, etwa 0:4, 3000:2, 9000:1. Teiler dürfen nur kleiner werden. Jeder Wechsel rückt auf den nächsten vollständigen Durchlauf des Datensatzes. Leer verwendet den automatischen Plan."),
+    FR("Remplace les étapes automatiques par les vôtres : des paires étape:diviseur, par exemple 0:4, 3000:2, 9000:1. Les diviseurs ne peuvent que diminuer. Chaque changement se place sur le passage complet du jeu de données le plus proche. Vide utilise le calendrier automatique."),
+    ES("Sustituye las etapas automáticas por las suyas: pares paso:divisor, por ejemplo 0:4, 3000:2, 9000:1. Los divisores solo pueden disminuir. Cada cambio se mueve a la pasada completa por el conjunto de datos más cercana. Vacío usa el calendario automático."),
+    PT("Substitui as etapas automáticas pelas suas: pares passo:divisor, por exemplo 0:4, 3000:2, 9000:1. Os divisores só podem diminuir. Cada mudança vai para a passagem completa pelo conjunto de dados mais próxima. Vazio usa o cronograma automático."),
+    IT("Sostituisce le fasi automatiche con le proprie: coppie passo:divisore, per esempio 0:4, 3000:2, 9000:1. I divisori possono solo diminuire. Ogni cambio si sposta al passaggio completo sul set di dati più vicino. Vuoto usa il calendario automatico."),
+    NL("Vervangt de automatische fasen door eigen fasen: paren stap:deler, bijvoorbeeld 0:4, 3000:2, 9000:1. Delers mogen alleen kleiner worden. Elke wissel schuift naar de dichtstbijzijnde volledige ronde door de dataset. Leeg gebruikt het automatische schema."),
+    RU("Заменяет автоматические этапы своими: пары шаг:делитель, например 0:4, 3000:2, 9000:1. Делители могут только уменьшаться. Каждое переключение переносится на ближайший полный проход по набору данных. Пусто — используется автоматическое расписание."),
+    TR("Otomatik aşamaları kendi aşamalarınızla değiştirir: adım:bölen çiftleri, örneğin 0:4, 3000:2, 9000:1. Bölenler yalnızca küçülebilir. Her geçiş veri kümesi üzerindeki en yakın tam geçişe kayar. Boş bırakılırsa otomatik plan kullanılır."));
+SS_MSG(progressive_splat_budget,
+    EN("Grow splats with resolution"),
+    JA("解像度に合わせてスプラットを増やす"),
+    ZH_HANS("随分辨率增加泼溅"),
+    ZH_HANT("隨解析度增加潑濺"),
+    KO("해상도에 맞춰 스플랫 늘리기"),
+    DE("Splats mit der Auflösung wachsen lassen"),
+    FR("Faire croître les splats avec la résolution"),
+    ES("Aumentar los splats con la resolución"),
+    PT("Aumentar os splats com a resolução"),
+    IT("Far crescere gli splat con la risoluzione"),
+    NL("Splats laten groeien met de resolutie"),
+    RU("Наращивать сплаты вместе с разрешением"),
+    TR("Splat sayısını çözünürlükle birlikte artır"));
+SS_MSG(progressive_splat_budget_help,
+    EN("Holds the number of splats below the maximum until the images are sharp enough to show where more are needed, so the last splats are placed from full-resolution detail rather than blurry images. Automatic raises the limit from the starting point count to the maximum by the same factor at each resolution stage; Manual sets each stage's limit yourself. Off grows to the maximum as fast as usual."),
+    JA("画像が十分に鮮明になって、どこにスプラットが必要か分かるまで、スプラット数を最大値より低く抑えます。最後のスプラットはぼやけた画像ではなく元の解像度の細部から配置されます。自動では、開始時の点数から最大値まで、解像度の段階ごとに同じ倍率で上限を上げます。手動では各段階の上限を自分で設定します。オフなら通常どおりの速さで最大値まで増えます。"),
+    ZH_HANS("在图像清晰到能看出哪里需要更多泼溅之前，把泼溅数量压在最大值以下，使最后的泼溅依据完整分辨率的细节而不是模糊图像放置。自动：从初始点数到最大值，每个分辨率阶段按相同倍数提高上限；手动：自行设定每个阶段的上限。关闭时按通常速度增长到最大值。"),
+    ZH_HANT("在影像清晰到能看出哪裡需要更多潑濺之前，把潑濺數量壓在最大值以下，使最後的潑濺依據完整解析度的細節而不是模糊影像放置。自動：從初始點數到最大值，每個解析度階段按相同倍數提高上限；手動：自行設定每個階段的上限。關閉時按平常速度增長到最大值。"),
+    KO("이미지가 어디에 스플랫이 더 필요한지 보일 만큼 선명해질 때까지 스플랫 수를 최대치 아래로 묶어 두어, 마지막 스플랫이 흐린 이미지가 아니라 원래 해상도의 세부에서 배치되게 합니다. 자동은 시작 점 수에서 최대치까지 해상도 단계마다 같은 배수로 한도를 올립니다. 수동은 각 단계의 한도를 직접 정합니다. 끄면 평소 속도로 최대치까지 늘어납니다."),
+    DE("Hält die Zahl der Splats unter dem Maximum, bis die Bilder scharf genug sind, um zu zeigen, wo mehr gebraucht werden, damit die letzten Splats aus Details in voller Auflösung statt aus unscharfen Bildern entstehen. Automatisch hebt die Grenze von der Startpunktzahl bis zum Maximum in jeder Auflösungsstufe um denselben Faktor; Manuell legt die Grenze jeder Stufe selbst fest. Aus wächst wie gewohnt bis zum Maximum."),
+    FR("Maintient le nombre de splats sous le maximum jusqu'à ce que les images soient assez nettes pour montrer où il en faut davantage, afin que les derniers splats soient placés d'après les détails en pleine résolution et non d'images floues. Automatique relève la limite du nombre de points de départ jusqu'au maximum du même facteur à chaque étape de résolution ; Manuel fixe vous-même la limite de chaque étape. Désactivé, la croissance atteint le maximum aussi vite que d'habitude."),
+    ES("Mantiene el número de splats por debajo del máximo hasta que las imágenes son lo bastante nítidas para mostrar dónde hacen falta más, de modo que los últimos splats se colocan según el detalle a resolución completa y no según imágenes borrosas. Automático sube el límite desde el número de puntos inicial hasta el máximo con el mismo factor en cada etapa de resolución; Manual fija usted el límite de cada etapa. Desactivado, crece hasta el máximo tan rápido como siempre."),
+    PT("Mantém o número de splats abaixo do máximo até que as imagens estejam nítidas o bastante para mostrar onde são necessários mais, para que os últimos splats sejam colocados a partir dos detalhes em resolução completa e não de imagens borradas. Automático eleva o limite do número de pontos inicial até o máximo pelo mesmo fator em cada etapa de resolução; Manual define você mesmo o limite de cada etapa. Desligado, cresce até o máximo tão rápido quanto de costume."),
+    IT("Tiene il numero di splat sotto il massimo finché le immagini non sono abbastanza nitide da mostrare dove ne servono altri, così gli ultimi splat vengono posizionati dai dettagli a piena risoluzione e non da immagini sfocate. Automatico alza il limite dal numero di punti iniziale fino al massimo con lo stesso fattore a ogni fase di risoluzione; Manuale imposta tu il limite di ogni fase. Disattivato, cresce fino al massimo con la velocità di sempre."),
+    NL("Houdt het aantal splats onder het maximum totdat de beelden scherp genoeg zijn om te tonen waar er meer nodig zijn, zodat de laatste splats uit details op volledige resolutie worden geplaatst in plaats van uit wazige beelden. Automatisch verhoogt de grens van het aantal startpunten tot het maximum met dezelfde factor per resolutiefase; Handmatig stelt u de grens van elke fase zelf in. Uit groeit zo snel als gewoonlijk tot het maximum."),
+    RU("Держит число сплатов ниже максимума, пока изображения не станут достаточно чёткими, чтобы показать, где нужно больше, — так последние сплаты размещаются по деталям полного разрешения, а не по размытым изображениям. Автоматически: предел растёт от начального числа точек до максимума в одно и то же число раз на каждом этапе разрешения; вручную: предел каждого этапа задаёте вы. Выключено — рост до максимума с обычной скоростью."),
+    TR("Görüntüler nerede daha fazla splat gerektiğini gösterecek kadar netleşene dek splat sayısını en yüksek değerin altında tutar; böylece son splat'ler bulanık görüntülerden değil tam çözünürlükteki ayrıntılardan yerleştirilir. Otomatik, sınırı başlangıç nokta sayısından en yüksek değere her çözünürlük aşamasında aynı katla yükseltir; Elle, her aşamanın sınırını sizin belirlemenizi sağlar. Kapalıyken her zamanki hızla en yüksek değere büyür."));
+SS_MSG(progressive_splat_budget_schedule,
+    EN("Manual splat budget"),
+    JA("手動のスプラット予算"),
+    ZH_HANS("手动泼溅预算"),
+    ZH_HANT("手動潑濺預算"),
+    KO("수동 스플랫 예산"),
+    DE("Manuelles Splat-Budget"),
+    FR("Budget de splats manuel"),
+    ES("Presupuesto de splats manual"),
+    PT("Orçamento de splats manual"),
+    IT("Budget di splat manuale"),
+    NL("Handmatig splatbudget"),
+    RU("Ручной бюджет сплатов"),
+    TR("Elle splat bütçesi"));
+SS_MSG(progressive_splat_budget_schedule_help,
+    EN("The most splats each resolution stage may grow to: a count such as 500000, a fraction of the maximum such as 0.25, or a percentage such as 25%. A blank box uses the automatic value. Limits may only grow from stage to stage. On the command line: one value per stage, separated by commas."),
+    JA("各解像度の段階で増やせるスプラット数の上限です。500000 のような個数、0.25 のような最大値に対する割合、25% のような百分率で指定します。空欄なら自動の値を使います。上限は段階を追うごとに大きくなる方向にしか変えられません。コマンドラインでは段階ごとの値をカンマで区切ります。"),
+    ZH_HANS("每个分辨率阶段最多可增长到的泼溅数：可以是 500000 这样的数量、0.25 这样的最大值比例，或 25% 这样的百分比。留空则使用自动值。上限只能逐阶段增加。命令行中每个阶段一个值，用逗号分隔。"),
+    ZH_HANT("每個解析度階段最多可增長到的潑濺數：可以是 500000 這樣的數量、0.25 這樣的最大值比例，或 25% 這樣的百分比。留空則使用自動值。上限只能逐階段增加。命令列中每個階段一個值，以逗號分隔。"),
+    KO("각 해상도 단계에서 늘릴 수 있는 스플랫 수의 한도입니다. 500000 같은 개수, 0.25 같은 최대치에 대한 비율, 25% 같은 백분율로 입력합니다. 비워 두면 자동 값을 씁니다. 한도는 단계마다 커지는 방향으로만 정할 수 있습니다. 명령줄에서는 단계별 값을 쉼표로 구분합니다."),
+    DE("Höchstzahl an Splats, bis zu der jede Auflösungsstufe wachsen darf: eine Anzahl wie 500000, ein Anteil am Maximum wie 0.25 oder ein Prozentsatz wie 25%. Ein leeres Feld nimmt den automatischen Wert. Die Grenzen dürfen von Stufe zu Stufe nur wachsen. In der Befehlszeile: ein Wert pro Stufe, durch Kommas getrennt."),
+    FR("Le nombre maximal de splats jusqu'auquel chaque étape de résolution peut croître : un nombre comme 500000, une fraction du maximum comme 0.25 ou un pourcentage comme 25%. Une case vide prend la valeur automatique. Les limites ne peuvent qu'augmenter d'une étape à l'autre. En ligne de commande : une valeur par étape, séparées par des virgules."),
+    ES("El máximo de splats hasta el que puede crecer cada etapa de resolución: una cantidad como 500000, una fracción del máximo como 0.25 o un porcentaje como 25%. Una casilla vacía usa el valor automático. Los límites solo pueden crecer de una etapa a la siguiente. En la línea de comandos: un valor por etapa, separados por comas."),
+    PT("O máximo de splats até o qual cada etapa de resolução pode crescer: uma quantidade como 500000, uma fração do máximo como 0.25 ou uma porcentagem como 25%. Uma caixa vazia usa o valor automático. Os limites só podem crescer de uma etapa para a seguinte. Na linha de comando: um valor por etapa, separados por vírgulas."),
+    IT("Il numero massimo di splat fino a cui può crescere ogni fase di risoluzione: un numero come 500000, una frazione del massimo come 0.25 o una percentuale come 25%. Una casella vuota usa il valore automatico. I limiti possono solo crescere da una fase alla successiva. Da riga di comando: un valore per fase, separati da virgole."),
+    NL("Het hoogste aantal splats waartoe elke resolutiefase mag groeien: een aantal zoals 500000, een deel van het maximum zoals 0.25 of een percentage zoals 25%. Een leeg vak gebruikt de automatische waarde. Grenzen mogen van fase tot fase alleen groeien. Op de opdrachtregel: één waarde per fase, gescheiden door komma's."),
+    RU("Наибольшее число сплатов, до которого может вырасти каждый этап разрешения: количество, например 500000, доля максимума, например 0.25, или процент, например 25%. Пустое поле берёт автоматическое значение. Пределы могут только расти от этапа к этапу. В командной строке: по одному значению на этап через запятую."),
+    TR("Her çözünürlük aşamasının büyüyebileceği en çok splat sayısı: 500000 gibi bir sayı, 0.25 gibi en yüksek değerin bir kesri ya da %25 gibi bir yüzde. Boş kutu otomatik değeri kullanır. Sınırlar aşamadan aşamaya yalnızca büyüyebilir. Komut satırında: aşama başına bir değer, virgülle ayrılmış."));
+SS_MSG(progressive_splat_budget_mode,
+    EN("Splat budget"),
+    JA("スプラット予算"),
+    ZH_HANS("泼溅预算"),
+    ZH_HANT("潑濺預算"),
+    KO("스플랫 예산"),
+    DE("Splat-Budget"),
+    FR("Budget de splats"),
+    ES("Presupuesto de splats"),
+    PT("Orçamento de splats"),
+    IT("Budget di splat"),
+    NL("Splatbudget"),
+    RU("Бюджет сплатов"),
+    TR("Splat bütçesi"));
+SS_MSG(progressive_splat_budget_auto,
+    EN("Automatic"),
+    JA("自動"),
+    ZH_HANS("自动"),
+    ZH_HANT("自動"),
+    KO("자동"),
+    DE("Automatisch"),
+    FR("Automatique"),
+    ES("Automático"),
+    PT("Automático"),
+    IT("Automatico"),
+    NL("Automatisch"),
+    RU("Автоматически"),
+    TR("Otomatik"));
+SS_MSG(progressive_splat_budget_manual,
+    EN("Manual, per stage"),
+    JA("手動（段階ごと）"),
+    ZH_HANS("手动（按阶段）"),
+    ZH_HANT("手動（按階段）"),
+    KO("수동 (단계별)"),
+    DE("Manuell, je Stufe"),
+    FR("Manuel, par étape"),
+    ES("Manual, por etapa"),
+    PT("Manual, por etapa"),
+    IT("Manuale, per fase"),
+    NL("Handmatig, per fase"),
+    RU("Вручную, по этапам"),
+    TR("Elle, aşama başına"));
+SS_MSG(progressive_splat_budget_stage,
+    EN("Up to, at 1/{0} resolution"),
+    JA("1/{0} 解像度での上限"),
+    ZH_HANS("1/{0} 分辨率时的上限"),
+    ZH_HANT("1/{0} 解析度時的上限"),
+    KO("1/{0} 해상도에서의 한도"),
+    DE("Höchstens, bei 1/{0} Auflösung"),
+    FR("Au plus, à la résolution 1/{0}"),
+    ES("Hasta, a resolución 1/{0}"),
+    PT("Até, na resolução 1/{0}"),
+    IT("Fino a, a risoluzione 1/{0}"),
+    NL("Tot, bij resolutie 1/{0}"),
+    RU("Не больше, при разрешении 1/{0}"),
+    TR("En çok, 1/{0} çözünürlükte"));
+SS_MSG(progressive_splat_budget_stage_full,
+    EN("Up to, at full resolution"),
+    JA("元の解像度での上限"),
+    ZH_HANS("完整分辨率时的上限"),
+    ZH_HANT("完整解析度時的上限"),
+    KO("원래 해상도에서의 한도"),
+    DE("Höchstens, bei voller Auflösung"),
+    FR("Au plus, en pleine résolution"),
+    ES("Hasta, a resolución completa"),
+    PT("Até, na resolução completa"),
+    IT("Fino a, a piena risoluzione"),
+    NL("Tot, bij volledige resolutie"),
+    RU("Не больше, при полном разрешении"),
+    TR("En çok, tam çözünürlükte"));
+SS_MSG(progressive_splat_budget_hint,
+    EN("automatic"),
+    JA("自動"),
+    ZH_HANS("自动"),
+    ZH_HANT("自動"),
+    KO("자동"),
+    DE("automatisch"),
+    FR("automatique"),
+    ES("automático"),
+    PT("automático"),
+    IT("automatico"),
+    NL("automatisch"),
+    RU("автоматически"),
+    TR("otomatik"));
+SS_MSG(progressive_splat_budget_plan,
+    EN("Limits: {0}"),
+    JA("上限: {0}"),
+    ZH_HANS("上限：{0}"),
+    ZH_HANT("上限：{0}"),
+    KO("한도: {0}"),
+    DE("Grenzen: {0}"),
+    FR("Limites : {0}"),
+    ES("Límites: {0}"),
+    PT("Limites: {0}"),
+    IT("Limiti: {0}"),
+    NL("Grenzen: {0}"),
+    RU("Пределы: {0}"),
+    TR("Sınırlar: {0}"));
+SS_MSG(progressive_splat_budget_seed,
+    EN("From {0} starting points to the maximum of {1}."),
+    JA("開始時の {0} 点から最大の {1} まで。"),
+    ZH_HANS("从 {0} 个初始点到最大值 {1}。"),
+    ZH_HANT("從 {0} 個初始點到最大值 {1}。"),
+    KO("시작 점 {0}개에서 최대치 {1}까지."),
+    DE("Von {0} Startpunkten bis zum Maximum von {1}."),
+    FR("De {0} points de départ jusqu'au maximum de {1}."),
+    ES("De {0} puntos iniciales al máximo de {1}."),
+    PT("De {0} pontos iniciais até o máximo de {1}."),
+    IT("Da {0} punti iniziali al massimo di {1}."),
+    NL("Van {0} startpunten tot het maximum van {1}."),
+    RU("От {0} начальных точек до максимума {1}."),
+    TR("{0} başlangıç noktasından en yüksek değer olan {1} değerine."));
+SS_MSG(progressive_splat_budget_seed_unknown,
+    EN("Open the dataset to see the starting point count; until then this assumes none, and training uses the real count."),
+    JA("開始時の点数はデータセットを開くと表示されます。それまではゼロとして計算し、学習では実際の点数を使います。"),
+    ZH_HANS("打开数据集后会显示初始点数；在此之前按零计算，训练时使用实际点数。"),
+    ZH_HANT("開啟資料集後會顯示初始點數；在此之前按零計算，訓練時使用實際點數。"),
+    KO("데이터셋을 열면 시작 점 수가 표시됩니다. 그 전에는 0으로 계산하며 학습에는 실제 점 수를 씁니다."),
+    DE("Die Startpunktzahl erscheint, wenn der Datensatz geöffnet ist; bis dahin wird mit null gerechnet, das Training nimmt die echte Zahl."),
+    FR("Le nombre de points de départ s'affiche une fois le jeu de données ouvert ; d'ici là le calcul suppose zéro, et l'entraînement utilise le vrai nombre."),
+    ES("El número de puntos iniciales aparece al abrir el conjunto de datos; hasta entonces se supone cero, y el entrenamiento usa el número real."),
+    PT("O número de pontos iniciais aparece ao abrir o conjunto de dados; até lá supõe-se zero, e o treinamento usa o número real."),
+    IT("Il numero di punti iniziali compare aprendo il set di dati; fino ad allora si assume zero, e l'addestramento usa il numero reale."),
+    NL("Het aantal startpunten verschijnt zodra de dataset geopend is; tot dan wordt nul aangenomen, en de training gebruikt het echte aantal."),
+    RU("Число начальных точек появится после открытия набора данных; до этого считается ноль, а обучение использует настоящее число."),
+    TR("Başlangıç nokta sayısı veri kümesi açılınca görünür; o zamana dek sıfır varsayılır, eğitim gerçek sayıyı kullanır."));
 SS_MSG(downscale_rounding_mode,
     EN("Downscale rounding"), JA("縮小時の丸め方"),
     ZH_HANS("缩小时的取整方式"), ZH_HANT("縮小時的取整方式"),
@@ -2214,75 +2566,159 @@ SS_MSG(scene_center,
 SS_MSG(scene_center_help,
     EN("Move the dataset so this point becomes the origin before training, and "
        "record the shift in scene_transform.json in the output folder. Splats "
-       "are then trained in the shifted frame. Useful for geo-referenced "
+       "are then trained in the shifted frame. Needed for geo-referenced "
        "reconstructions whose coordinates are millions of units from the "
-       "origin, where single precision would lose detail. `none` keeps the "
-       "dataset's own frame."),
+       "origin, where single precision would lose detail. `auto` centers on the "
+       "point cloud median when the scene lies far from the origin for its size, "
+       "and keeps the frame otherwise; `none` always keeps the dataset's own "
+       "frame."),
     JA("学習前にデータセットを移動し、この点を原点にします。移動量は出力フォルダの "
        "scene_transform.json に記録され、スプラットは移動後の座標系で学習されます。"
        "座標が原点から数百万単位も離れた地理参照付きの再構成では、単精度では細部が"
-       "失われるため有効です。`none` はデータセット自身の座標系をそのまま使います。"),
+       "失われるため必要です。`auto` はシーンが自身の大きさに比べて原点から遠いとき"
+       "だけ点群の中央値に合わせ、それ以外は座標系を変えません。`none` は常に"
+       "データセット自身の座標系を使います。"),
     ZH_HANS("训练前平移数据集，使该点成为原点，并把平移量记录到输出文件夹的 "
-            "scene_transform.json 中；泼溅在平移后的坐标系中训练。适用于坐标距原点"
-            "数百万单位的地理参考重建，否则单精度会丢失细节。`none` 保留数据集自身"
-            "的坐标系。"),
+            "scene_transform.json 中；泼溅在平移后的坐标系中训练。坐标距原点"
+            "数百万单位的地理参考重建需要这样做，否则单精度会丢失细节。`auto` "
+            "仅在场景相对自身大小离原点很远时以点云中位数居中，否则不改变坐标系；"
+            "`none` 始终保留数据集自身的坐标系。"),
     ZH_HANT("訓練前平移資料集，使該點成為原點，並把平移量記錄到輸出資料夾的 "
-            "scene_transform.json 中；潑濺在平移後的座標系中訓練。適用於座標距原點"
-            "數百萬單位的地理參考重建，否則單精度會遺失細節。`none` 保留資料集自身"
-            "的座標系。"),
+            "scene_transform.json 中；潑濺在平移後的座標系中訓練。座標距原點"
+            "數百萬單位的地理參考重建需要這樣做，否則單精度會遺失細節。`auto` "
+            "僅在場景相對自身大小離原點很遠時以點雲中位數置中，否則不改變座標系；"
+            "`none` 始終保留資料集自身的座標系。"),
     KO("학습 전에 데이터셋을 옮겨 이 점을 원점으로 삼고, 그 이동량을 출력 폴더의 "
        "scene_transform.json에 기록합니다. 스플랫은 옮겨진 좌표계에서 학습됩니다. "
        "좌표가 원점에서 수백만 단위 떨어진 지리 참조 복원에서는 단정밀도로 세부가 "
-       "사라지므로 유용합니다. `none`은 데이터셋 자체의 좌표계를 그대로 둡니다."),
+       "사라지므로 필요합니다. `auto`는 장면이 자체 크기에 비해 원점에서 멀리 있을 "
+       "때만 점군 중앙값으로 맞추고, 그렇지 않으면 좌표계를 그대로 둡니다. `none`은 "
+       "항상 데이터셋 자체의 좌표계를 유지합니다."),
     DE("Verschiebt den Datensatz vor dem Training so, dass dieser Punkt zum "
        "Ursprung wird, und hält die Verschiebung in scene_transform.json im "
        "Ausgabeordner fest. Die Splats werden im verschobenen Bezugssystem "
-       "trainiert. Nützlich für georeferenzierte Rekonstruktionen, deren "
+       "trainiert. Nötig für georeferenzierte Rekonstruktionen, deren "
        "Koordinaten Millionen Einheiten vom Ursprung entfernt liegen, wo einfache "
-       "Genauigkeit Details verliert. `none` behält das Bezugssystem des "
-       "Datensatzes."),
+       "Genauigkeit Details verliert. `auto` zentriert nur dann auf den Median "
+       "der Punktwolke, wenn die Szene gemessen an ihrer Größe weit vom Ursprung "
+       "entfernt liegt, und lässt das Bezugssystem sonst unverändert; `none` "
+       "behält immer das Bezugssystem des Datensatzes."),
     FR("Déplace le jeu de données avant l'entraînement pour que ce point devienne "
        "l'origine, et note le décalage dans scene_transform.json dans le dossier "
-       "de sortie. Les splats sont alors entraînés dans le repère décalé. Utile "
-       "pour les reconstructions géoréférencées dont les coordonnées sont à des "
-       "millions d'unités de l'origine, où la simple précision perd des détails. "
-       "`none` garde le repère du jeu de données."),
+       "de sortie. Les splats sont alors entraînés dans le repère décalé. "
+       "Nécessaire pour les reconstructions géoréférencées dont les coordonnées "
+       "sont à des millions d'unités de l'origine, où la simple précision perd "
+       "des détails. `auto` centre sur la médiane du nuage de points seulement "
+       "quand la scène est loin de l'origine au regard de sa taille, et garde le "
+       "repère sinon ; `none` garde toujours le repère du jeu de données."),
     ES("Desplaza el conjunto de datos antes de entrenar para que este punto sea "
        "el origen, y anota el desplazamiento en scene_transform.json en la carpeta "
-       "de salida. Los splats se entrenan entonces en el sistema desplazado. Útil "
-       "para reconstrucciones georreferenciadas cuyas coordenadas están a millones "
-       "de unidades del origen, donde la precisión simple pierde detalle. `none` "
-       "conserva el sistema propio del conjunto de datos."),
+       "de salida. Los splats se entrenan entonces en el sistema desplazado. "
+       "Necesario para reconstrucciones georreferenciadas cuyas coordenadas están "
+       "a millones de unidades del origen, donde la precisión simple pierde "
+       "detalle. `auto` centra en la mediana de la nube de puntos solo cuando la "
+       "escena está lejos del origen en relación con su tamaño, y si no conserva "
+       "el sistema; `none` conserva siempre el sistema propio del conjunto de "
+       "datos."),
     PT("Desloca o conjunto de dados antes do treino para que este ponto vire a "
        "origem, e registra o deslocamento em scene_transform.json na pasta de "
-       "saída. Os splats são então treinados no referencial deslocado. Útil para "
-       "reconstruções georreferenciadas cujas coordenadas ficam a milhões de "
-       "unidades da origem, onde a precisão simples perde detalhe. `none` mantém "
-       "o referencial do próprio conjunto de dados."),
+       "saída. Os splats são então treinados no referencial deslocado. Necessário "
+       "para reconstruções georreferenciadas cujas coordenadas ficam a milhões de "
+       "unidades da origem, onde a precisão simples perde detalhe. `auto` "
+       "centraliza na mediana da nuvem de pontos só quando a cena está longe da "
+       "origem em relação ao próprio tamanho, e caso contrário mantém o "
+       "referencial; `none` mantém sempre o referencial do próprio conjunto de "
+       "dados."),
     IT("Sposta il dataset prima dell'addestramento in modo che questo punto "
        "diventi l'origine, e annota lo spostamento in scene_transform.json nella "
        "cartella di output. Gli splat vengono quindi addestrati nel sistema "
-       "spostato. Utile per ricostruzioni georeferenziate le cui coordinate "
+       "spostato. Necessario per ricostruzioni georeferenziate le cui coordinate "
        "distano milioni di unità dall'origine, dove la precisione singola perde "
-       "dettaglio. `none` mantiene il sistema proprio del dataset."),
+       "dettaglio. `auto` centra sulla mediana della nuvola di punti solo quando "
+       "la scena è lontana dall'origine rispetto alle sue dimensioni, altrimenti "
+       "mantiene il sistema; `none` mantiene sempre il sistema proprio del "
+       "dataset."),
     NL("Verschuift de dataset vóór het trainen zodat dit punt de oorsprong wordt, "
        "en legt de verschuiving vast in scene_transform.json in de uitvoermap. De "
-       "splats worden dan in het verschoven stelsel getraind. Handig voor "
+       "splats worden dan in het verschoven stelsel getraind. Nodig voor "
        "gegeorefereerde reconstructies waarvan de coördinaten miljoenen eenheden "
-       "van de oorsprong liggen, waar enkele precisie detail verliest. `none` "
-       "behoudt het eigen stelsel van de dataset."),
+       "van de oorsprong liggen, waar enkele precisie detail verliest. `auto` "
+       "centreert alleen op de mediaan van de puntenwolk als de scène ver van de "
+       "oorsprong ligt in verhouding tot haar grootte, en behoudt het stelsel "
+       "anders; `none` behoudt altijd het eigen stelsel van de dataset."),
     RU("Сдвигает набор данных перед обучением так, чтобы эта точка стала началом "
        "координат, и записывает сдвиг в scene_transform.json в папке вывода. "
-       "Сплаты обучаются в сдвинутой системе координат. Полезно для "
+       "Сплаты обучаются в сдвинутой системе координат. Необходимо для "
        "геопривязанных реконструкций, координаты которых отстоят от начала на "
-       "миллионы единиц, где одинарная точность теряет детали. `none` сохраняет "
-       "собственную систему набора данных."),
+       "миллионы единиц, где одинарная точность теряет детали. `auto` центрирует "
+       "по медиане облака точек, только если сцена далеко от начала координат по "
+       "сравнению со своим размером, а иначе сохраняет систему; `none` всегда "
+       "сохраняет собственную систему набора данных."),
     TR("Eğitimden önce veri kümesini bu nokta başlangıç olacak şekilde kaydırır "
        "ve kaydırmayı çıktı klasöründeki scene_transform.json dosyasına yazar. "
        "Splatlar kaydırılmış çerçevede eğitilir. Koordinatları başlangıçtan "
        "milyonlarca birim uzakta olan coğrafi referanslı yeniden kurmalar için "
-       "yararlıdır; tek duyarlık orada ayrıntı kaybeder. `none` veri kümesinin "
-       "kendi çerçevesini korur."));
+       "gereklidir; tek duyarlık orada ayrıntı kaybeder. `auto` yalnızca sahne "
+       "kendi boyutuna göre başlangıçtan uzaktaysa nokta bulutu ortancasına "
+       "ortalar, değilse çerçeveyi korur; `none` her zaman veri kümesinin kendi "
+       "çerçevesini korur."));
+
+SS_MSG(scene_center_threshold,
+    EN("Auto-centering distance"), JA("自動中心合わせの距離"),
+    ZH_HANS("自动居中距离"), ZH_HANT("自動置中距離"), KO("자동 중심 맞추기 거리"),
+    DE("Abstand für automatisches Zentrieren"),
+    FR("Distance du centrage automatique"), ES("Distancia del centrado automático"),
+    PT("Distância da centralização automática"),
+    IT("Distanza della centratura automatica"),
+    NL("Afstand voor automatisch centreren"), RU("Расстояние автоцентрирования"),
+    TR("Otomatik ortalama mesafesi"));
+SS_MSG(scene_center_threshold_help,
+    EN("How far from the origin a scene must lie before `auto` scene centering "
+       "moves it, in multiples of its own radius (the median distance to its "
+       "median). The point cloud and the camera positions must both be that far "
+       "out."),
+    JA("`auto` のシーン中心合わせが働くには、シーンが原点からどれだけ離れている"
+       "必要があるか。シーン自身の半径（中央値までの距離の中央値）の倍数で指定"
+       "します。点群とカメラ位置の両方がそれだけ離れている必要があります。"),
+    ZH_HANS("场景离原点多远时 `auto` 场景居中才会平移它，以场景自身半径（到中位数"
+            "距离的中位数）的倍数表示。点云和相机位置都必须离得这么远。"),
+    ZH_HANT("場景離原點多遠時 `auto` 場景置中才會平移它，以場景自身半徑（到中位數"
+            "距離的中位數）的倍數表示。點雲和相機位置都必須離得這麼遠。"),
+    KO("`auto` 장면 중심 맞추기가 장면을 옮기려면 원점에서 얼마나 떨어져 있어야 "
+       "하는지를 장면 자체 반지름(중앙값까지 거리의 중앙값)의 배수로 정합니다. "
+       "점군과 카메라 위치가 모두 그만큼 떨어져 있어야 합니다."),
+    DE("Wie weit eine Szene vom Ursprung entfernt liegen muss, damit das "
+       "Zentrieren mit `auto` sie verschiebt, in Vielfachen ihres eigenen Radius "
+       "(des Medians der Abstände zu ihrem Median). Punktwolke und "
+       "Kamerapositionen müssen beide so weit entfernt liegen."),
+    FR("Distance à l'origine à partir de laquelle le centrage `auto` déplace la "
+       "scène, en multiples de son propre rayon (la médiane des distances à sa "
+       "médiane). Le nuage de points et les positions de caméra doivent tous deux "
+       "être aussi loin."),
+    ES("A qué distancia del origen debe estar una escena para que el centrado "
+       "`auto` la desplace, en múltiplos de su propio radio (la mediana de las "
+       "distancias a su mediana). La nube de puntos y las posiciones de cámara "
+       "deben estar ambas así de lejos."),
+    PT("A que distância da origem uma cena precisa estar para que a "
+       "centralização `auto` a desloque, em múltiplos do seu próprio raio (a "
+       "mediana das distâncias até a sua mediana). A nuvem de pontos e as "
+       "posições das câmeras precisam estar ambas tão longe."),
+    IT("Quanto lontano dall'origine deve trovarsi una scena perché la centratura "
+       "`auto` la sposti, in multipli del suo stesso raggio (la mediana delle "
+       "distanze dalla sua mediana). La nuvola di punti e le posizioni delle "
+       "camere devono essere entrambe così lontane."),
+    NL("Hoe ver een scène van de oorsprong moet liggen voordat centreren met "
+       "`auto` haar verschuift, in veelvouden van haar eigen straal (de mediaan "
+       "van de afstanden tot haar mediaan). De puntenwolk en de cameraposities "
+       "moeten allebei zo ver liggen."),
+    RU("Насколько далеко от начала координат должна быть сцена, чтобы "
+       "центрирование `auto` её сдвинуло, в единицах её собственного радиуса "
+       "(медианы расстояний до её медианы). Так далеко должны быть и облако "
+       "точек, и положения камер."),
+    TR("`auto` sahne ortalamasının sahneyi kaydırması için sahnenin başlangıçtan "
+       "ne kadar uzakta olması gerektiği, kendi yarıçapının (ortancasına olan "
+       "uzaklıkların ortancası) katı olarak. Nokta bulutu ve kamera konumlarının "
+       "ikisi de bu kadar uzakta olmalıdır."));
 
 SS_MSG(relative_scale,
     EN("Scene scale multiplier"), JA("シーンの倍率"),
@@ -2906,19 +3342,19 @@ SS_MSG(seed_pointcloud,
     IT("Nuvola di punti iniziale PLY"), NL("Startpuntenwolk PLY"),
     RU("Начальное облако точек PLY"), TR("Başlangıç nokta bulutu PLY"));
 SS_MSG(seed_pointcloud_help,
-    EN("Replace the dataset's seed cloud with an XYZ + RGB PLY in the same source coordinate frame as the cameras. Relative paths start at the dataset directory. Scene centering and scaling apply to both. This is a point cloud, not an already-trained splat PLY. random_init=always overrides it; init_ply uses it only with init_ply_add_points. Resume restores checkpoint splats."),
-    JA("カメラと同じ元の座標系の XYZ + RGB PLY で初期点群を置き換えます。相対パスはデータセット基準です。中心移動とスケールは両方に適用されます。学習済みスプラットではなく点群です。random_init=always はこれを上書きし、init_ply は init_ply_add_points の場合のみ使用します。再開時はチェックポイントを復元します。"),
-    ZH_HANS("用与相机处于同一原始坐标系的 XYZ + RGB PLY 替换数据集的初始化点云。相对路径以数据集目录为基准，居中和缩放同时作用于点云与相机。这是普通点云，不是训练好的高斯 PLY。random_init=always 会覆盖它；init_ply 仅在 init_ply_add_points 开启时使用它。恢复训练使用检查点中的高斯。"),
-    ZH_HANT("用與相機處於同一原始座標系的 XYZ + RGB PLY 取代資料集的初始化點雲。相對路徑以資料集目錄為基準，置中和縮放同時作用於點雲與相機。這是普通點雲，不是訓練好的高斯 PLY。random_init=always 會覆蓋它；init_ply 僅在 init_ply_add_points 開啟時使用它。恢復訓練使用檢查點中的高斯。"),
-    KO("카메라와 같은 원본 좌표계의 XYZ + RGB PLY로 초기 점 구름을 교체합니다. 상대 경로는 데이터셋 기준이며 중심 이동과 배율은 둘 다에 적용됩니다. 학습된 스플랫이 아닌 점 구름입니다. random_init=always가 덮어쓰며 init_ply는 init_ply_add_points일 때만 사용합니다. 재개 시 체크포인트를 복원합니다."),
-    DE("Ersetzt die Startpunktwolke durch ein XYZ + RGB PLY im Quellkoordinatensystem der Kameras. Relative Pfade beginnen im Datensatzordner. Zentrierung und Skalierung gelten für beide. Kein trainiertes Splat-PLY. random_init=always überschreibt es; init_ply nutzt es nur mit init_ply_add_points. Fortsetzen stellt Checkpoint-Splats wieder her."),
-    FR("Remplace le nuage initial par un PLY XYZ + RGB dans le repère source des caméras. Les chemins relatifs partent du dossier du jeu de données. Centrage et échelle s'appliquent aux deux. Ce n'est pas un PLY de splats entraîné. random_init=always le remplace ; init_ply l'utilise uniquement avec init_ply_add_points. La reprise restaure les splats du checkpoint."),
-    ES("Sustituye la nube inicial por un PLY XYZ + RGB en el sistema de origen de las cámaras. Las rutas relativas parten del conjunto de datos. Centrado y escala se aplican a ambos. No es un PLY de splats entrenado. random_init=always lo sustituye; init_ply solo lo usa con init_ply_add_points. Reanudar restaura los splats del checkpoint."),
-    PT("Substitui a nuvem inicial por um PLY XYZ + RGB no sistema de origem das câmeras. Caminhos relativos partem da pasta do conjunto de dados. Centralização e escala se aplicam a ambos. Não é um PLY de splats treinado. random_init=always o substitui; init_ply só o usa com init_ply_add_points. Retomar restaura os splats do checkpoint."),
-    IT("Sostituisce la nuvola iniziale con un PLY XYZ + RGB nel sistema originale delle camere. I percorsi relativi partono dalla cartella del set di dati. Centratura e scala si applicano a entrambi. Non è un PLY di splat addestrati. random_init=always lo sostituisce; init_ply lo usa solo con init_ply_add_points. La ripresa ripristina gli splat del checkpoint."),
-    NL("Vervangt de startpuntenwolk door een XYZ + RGB PLY in het bronstelsel van de camera's. Relatieve paden beginnen bij de datasetmap. Centrering en schaal gelden voor beide. Geen getraind splat-PLY. random_init=always vervangt het; init_ply gebruikt het alleen met init_ply_add_points. Hervatten herstelt de checkpoint-splats."),
-    RU("Заменяет начальное облако файлом XYZ + RGB PLY в исходной системе координат камер. Относительные пути идут от каталога данных. Центрирование и масштаб применяются к обоим. Это не обученный PLY сплатов. random_init=always заменяет его; init_ply использует его только с init_ply_add_points. Возобновление восстанавливает сплаты контрольной точки."),
-    TR("Başlangıç bulutunu kameralarla aynı kaynak koordinat sistemindeki XYZ + RGB PLY ile değiştirir. Göreli yollar veri kümesi klasöründen başlar. Merkezleme ve ölçek ikisine de uygulanır. Eğitilmiş splat PLY değildir. random_init=always bunun yerine geçer; init_ply yalnızca init_ply_add_points ile kullanır. Devam etme kontrol noktası splatlarını geri yükler."));
+    EN("Empty uses the dataset's finished dense cloud (dense/roma.ply) when it has one, else its own points; `sparse` always uses its own points. A path: Replace the dataset's seed cloud with an XYZ + RGB PLY in the same source coordinate frame as the cameras. Relative paths start at the dataset directory. Scene centering and scaling apply to both. This is a point cloud, not an already-trained splat PLY. random_init=always overrides it; init_ply uses it only with init_ply_add_points. Resume restores checkpoint splats."),
+    JA("空欄では、データセットに完成した高密度点群（dense/roma.ply）があればそれを、なければ自身の点群を使います。`sparse` は常に自身の点群です。パスを指定した場合：カメラと同じ元の座標系の XYZ + RGB PLY で初期点群を置き換えます。相対パスはデータセット基準です。中心移動とスケールは両方に適用されます。学習済みスプラットではなく点群です。random_init=always はこれを上書きし、init_ply は init_ply_add_points の場合のみ使用します。再開時はチェックポイントを復元します。"),
+    ZH_HANS("留空时，若数据集有已完成的稠密点云（dense/roma.ply）则使用它，否则使用自带点云；`sparse` 始终使用自带点云。指定路径时：用与相机处于同一原始坐标系的 XYZ + RGB PLY 替换数据集的初始化点云。相对路径以数据集目录为基准，居中和缩放同时作用于点云与相机。这是普通点云，不是训练好的高斯 PLY。random_init=always 会覆盖它；init_ply 仅在 init_ply_add_points 开启时使用它。恢复训练使用检查点中的高斯。"),
+    ZH_HANT("留空時，若資料集有已完成的稠密點雲（dense/roma.ply）則使用它，否則使用自帶點雲；`sparse` 始終使用自帶點雲。指定路徑時：用與相機處於同一原始座標系的 XYZ + RGB PLY 取代資料集的初始化點雲。相對路徑以資料集目錄為基準，置中和縮放同時作用於點雲與相機。這是普通點雲，不是訓練好的高斯 PLY。random_init=always 會覆蓋它；init_ply 僅在 init_ply_add_points 開啟時使用它。恢復訓練使用檢查點中的高斯。"),
+    KO("비워 두면 데이터셋에 완성된 고밀도 점 구름(dense/roma.ply)이 있을 때 그것을, 없으면 자체 점 구름을 씁니다. `sparse`는 항상 자체 점 구름입니다. 경로를 주면: 카메라와 같은 원본 좌표계의 XYZ + RGB PLY로 초기 점 구름을 교체합니다. 상대 경로는 데이터셋 기준이며 중심 이동과 배율은 둘 다에 적용됩니다. 학습된 스플랫이 아닌 점 구름입니다. random_init=always가 덮어쓰며 init_ply는 init_ply_add_points일 때만 사용합니다. 재개 시 체크포인트를 복원합니다."),
+    DE("Leer nimmt die fertige dichte Punktwolke des Datensatzes (dense/roma.ply), sonst dessen eigene Punkte; `sparse` nimmt immer die eigenen Punkte. Ein Pfad: Ersetzt die Startpunktwolke durch ein XYZ + RGB PLY im Quellkoordinatensystem der Kameras. Relative Pfade beginnen im Datensatzordner. Zentrierung und Skalierung gelten für beide. Kein trainiertes Splat-PLY. random_init=always überschreibt es; init_ply nutzt es nur mit init_ply_add_points. Fortsetzen stellt Checkpoint-Splats wieder her."),
+    FR("Vide : le nuage dense terminé du jeu de données (dense/roma.ply) s'il existe, sinon ses propres points ; `sparse` prend toujours ses propres points. Un chemin : Remplace le nuage initial par un PLY XYZ + RGB dans le repère source des caméras. Les chemins relatifs partent du dossier du jeu de données. Centrage et échelle s'appliquent aux deux. Ce n'est pas un PLY de splats entraîné. random_init=always le remplace ; init_ply l'utilise uniquement avec init_ply_add_points. La reprise restaure les splats du checkpoint."),
+    ES("Vacío usa la nube densa terminada del conjunto de datos (dense/roma.ply) si existe, si no sus propios puntos; `sparse` usa siempre sus propios puntos. Una ruta: Sustituye la nube inicial por un PLY XYZ + RGB en el sistema de origen de las cámaras. Las rutas relativas parten del conjunto de datos. Centrado y escala se aplican a ambos. No es un PLY de splats entrenado. random_init=always lo sustituye; init_ply solo lo usa con init_ply_add_points. Reanudar restaura los splats del checkpoint."),
+    PT("Vazio usa a nuvem densa concluída do conjunto de dados (dense/roma.ply) quando existe, senão os próprios pontos; `sparse` usa sempre os próprios pontos. Um caminho: Substitui a nuvem inicial por um PLY XYZ + RGB no sistema de origem das câmeras. Caminhos relativos partem da pasta do conjunto de dados. Centralização e escala se aplicam a ambos. Não é um PLY de splats treinado. random_init=always o substitui; init_ply só o usa com init_ply_add_points. Retomar restaura os splats do checkpoint."),
+    IT("Vuoto usa la nuvola densa completata del set di dati (dense/roma.ply) se c'è, altrimenti i suoi punti; `sparse` usa sempre i suoi punti. Un percorso: Sostituisce la nuvola iniziale con un PLY XYZ + RGB nel sistema originale delle camere. I percorsi relativi partono dalla cartella del set di dati. Centratura e scala si applicano a entrambi. Non è un PLY di splat addestrati. random_init=always lo sostituisce; init_ply lo usa solo con init_ply_add_points. La ripresa ripristina gli splat del checkpoint."),
+    NL("Leeg gebruikt de voltooide dichte puntenwolk van de dataset (dense/roma.ply) als die er is, anders de eigen punten; `sparse` gebruikt altijd de eigen punten. Een pad: Vervangt de startpuntenwolk door een XYZ + RGB PLY in het bronstelsel van de camera's. Relatieve paden beginnen bij de datasetmap. Centrering en schaal gelden voor beide. Geen getraind splat-PLY. random_init=always vervangt het; init_ply gebruikt het alleen met init_ply_add_points. Hervatten herstelt de checkpoint-splats."),
+    RU("Пусто — готовое плотное облако набора данных (dense/roma.ply), если оно есть, иначе его собственные точки; `sparse` — всегда собственные точки. Путь: Заменяет начальное облако файлом XYZ + RGB PLY в исходной системе координат камер. Относительные пути идут от каталога данных. Центрирование и масштаб применяются к обоим. Это не обученный PLY сплатов. random_init=always заменяет его; init_ply использует его только с init_ply_add_points. Возобновление восстанавливает сплаты контрольной точки."),
+    TR("Boş bırakılırsa veri kümesinin tamamlanmış yoğun bulutu (dense/roma.ply) varsa o, yoksa kendi noktaları kullanılır; `sparse` her zaman kendi noktalarını kullanır. Bir yol: Başlangıç bulutunu kameralarla aynı kaynak koordinat sistemindeki XYZ + RGB PLY ile değiştirir. Göreli yollar veri kümesi klasöründen başlar. Merkezleme ve ölçek ikisine de uygulanır. Eğitilmiş splat PLY değildir. random_init=always bunun yerine geçer; init_ply yalnızca init_ply_add_points ile kullanır. Devam etme kontrol noktası splatlarını geri yükler."));
 
 SS_MSG(init_ply,
     EN("Initial splat PLY"), JA("初期スプラットの PLY"),
@@ -3155,68 +3591,105 @@ SS_MSG(roi_region,
     NL("Bestand met interessegebied"), RU("Файл области интереса"),
     TR("İlgi bölgesi dosyası"));
 SS_MSG(roi_region_help,
-    EN("A region JSON (boxes, spheres, half-spaces, a partition's label field, "
-       "combined with union, intersection and difference). Splats whose centre "
-       "lies outside it are drawn for relocation and growth with "
-       "--roi-outside-weight instead of 1, so the model stops growing there. A "
-       "partitioned run gets its part's region without this."),
-    JA("領域 JSON（ボックス、球、半空間、分割のラベルフィールドを和・積・差で組み"
-       "合わせたもの）。中心が領域外にあるスプラットは、再配置と成長の抽選で 1 の"
-       "代わりに --roi-outside-weight の重みになり、そこではモデルが成長しなくな"
-       "ります。分割学習ではこれなしでパートの領域が使われます。"),
-    ZH_HANS("区域 JSON（盒、球、半空间、分区的标签场，用并、交、差组合）。中心在区域"
-            "外的泼溅在重定位与增长抽样中以 --roi-outside-weight 而非 1 为权重，"
-            "模型因此不再在那里增长。分区训练无需此项即使用其分区的区域。"),
-    ZH_HANT("區域 JSON（盒、球、半空間、分區的標籤場，用聯集、交集、差集組合）。中"
-            "心在區域外的潑濺在重定位與增長抽樣中以 --roi-outside-weight 而非 1 為"
-            "權重，模型因此不再在那裡增長。分區訓練無需此項即使用其分區的區域。"),
-    KO("영역 JSON(상자, 구, 반공간, 분할의 라벨 필드를 합집합·교집합·차집합으로 "
-       "결합). 중심이 영역 밖인 스플랫은 재배치와 성장 추첨에서 1 대신 "
-       "--roi-outside-weight 가중치를 받아 그곳에서 모델이 더 자라지 않습니다. "
-       "분할 학습은 이것 없이도 파트의 영역을 씁니다."),
-    DE("Eine Regions-JSON (Quader, Kugeln, Halbräume, das Labelfeld einer "
-       "Partition, verknüpft mit Vereinigung, Schnitt und Differenz). Splats mit "
-       "Zentrum außerhalb ziehen bei Verlagerung und Wachstum mit "
-       "--roi-outside-weight statt 1, das Modell wächst dort also nicht weiter. "
-       "Ein partitionierter Lauf bekommt den Bereich seines Teils auch ohne dies."),
-    FR("Un JSON de région (boîtes, sphères, demi-espaces, le champ d'étiquettes "
-       "d'une partition, combinés par union, intersection et différence). Les "
-       "splats dont le centre est en dehors tirent, pour la relocalisation et la "
-       "croissance, avec --roi-outside-weight au lieu de 1 : le modèle cesse d'y "
-       "croître. Un entraînement partitionné reçoit la région de sa partie sans "
-       "cela."),
-    ES("Un JSON de región (cajas, esferas, semiespacios, el campo de etiquetas de "
-       "una partición, combinados con unión, intersección y diferencia). Los "
-       "splats con el centro fuera sortean, para reubicación y crecimiento, con "
-       "--roi-outside-weight en vez de 1, así que el modelo deja de crecer ahí. "
-       "Una ejecución particionada recibe la región de su parte sin esto."),
-    PT("Um JSON de região (caixas, esferas, semiespaços, o campo de rótulos de "
-       "uma partição, combinados por união, interseção e diferença). Os splats "
-       "com o centro fora sorteiam, para realocação e crescimento, com "
-       "--roi-outside-weight em vez de 1, pelo que o modelo deixa de crescer aí. "
-       "Um treino particionado recebe a região da sua parte sem isto."),
-    IT("Un JSON di regione (scatole, sfere, semispazi, il campo di etichette di "
-       "una partizione, combinati con unione, intersezione e differenza). Gli "
+    EN("A region JSON: what the ROI editor saves in the dataset's roi folder, or any "
+       "region (boxes, ellipsoids, cylinders, outlines, half-spaces, a partition's "
+       "label field, combined with union, intersection and difference). Unset, the "
+       "first file in <dataset>/roi is used; `off` trains the whole scene; a bare "
+       "name picks that file there. Splats whose centre lies outside it are drawn "
+       "for relocation and growth with --roi-outside-weight instead of 1, so the "
+       "model stops growing there. A partitioned run keeps to where its part and "
+       "the region overlap."),
+    JA("領域 JSON。ROI エディタがデータセットの roi フォルダに保存するもの、または任"
+       "意の領域（ボックス、楕円体、円柱、輪郭、半空間、分割のラベルフィールドを和・"
+       "積・差で組み合わせたもの）。未設定なら <dataset>/roi の先頭のファイルを使い、"
+       "`off` ならシーン全体を学習し、名前だけならそこにあるそのファイルを選びます。"
+       "中心が領域外にあるスプラットは、再配置と成長の抽選で 1 の代わりに "
+       "--roi-outside-weight の重みになり、そこではモデルが成長しなくなります。分割"
+       "学習ではパートと領域の重なりだけが使われます。"),
+    ZH_HANS("区域 JSON：ROI 编辑器保存在数据集 roi 文件夹中的文件，或任意区域（盒、椭"
+            "球、圆柱、轮廓、半空间、分区的标签场，用并、交、差组合）。未设置时使用 "
+            "<dataset>/roi 中的第一个文件；`off` 训练整个场景；只写名称则选取该文件"
+            "夹中的同名文件。中心在区域外的泼溅在重定位与增长抽样中以 "
+            "--roi-outside-weight 而非 1 为权重，模型因此不再在那里增长。分区训练只使"
+            "用其分区与该区域的交集。"),
+    ZH_HANT("區域 JSON：ROI 編輯器儲存在資料集 roi 資料夾中的檔案，或任意區域（盒、橢"
+            "球、圓柱、輪廓、半空間、分區的標籤場，用聯集、交集、差集組合）。未設定時"
+            "使用 <dataset>/roi 中的第一個檔案；`off` 訓練整個場景；只寫名稱則選取該"
+            "資料夾中的同名檔案。中心在區域外的潑濺在重定位與增長抽樣中以 "
+            "--roi-outside-weight 而非 1 為權重，模型因此不再在那裡增長。分區訓練只使"
+            "用其分區與該區域的交集。"),
+    KO("영역 JSON: ROI 편집기가 데이터셋의 roi 폴더에 저장한 파일, 또는 임의의 영역"
+       "(상자, 타원체, 원기둥, 윤곽, 반공간, 분할의 라벨 필드를 합집합·교집합·차집합"
+       "으로 결합). 비워 두면 <dataset>/roi의 첫 번째 파일을 쓰고, `off`이면 장면 "
+       "전체를 학습하며, 이름만 쓰면 그 폴더의 해당 파일을 고릅니다. 중심이 영역 밖인 "
+       "스플랫은 재배치와 성장 추첨에서 1 대신 --roi-outside-weight 가중치를 받아 "
+       "그곳에서 모델이 더 자라지 않습니다. 분할 학습은 파트와 이 영역이 겹치는 부분"
+       "만 씁니다."),
+    DE("Eine Regions-JSON: was der ROI-Editor im roi-Ordner des Datensatzes "
+       "speichert, oder jede andere Region (Quader, Ellipsoide, Zylinder, Umrisse, "
+       "Halbräume, das Labelfeld einer Partition, verknüpft mit Vereinigung, Schnitt "
+       "und Differenz). Leer wird die erste Datei in <dataset>/roi verwendet; `off` "
+       "trainiert die ganze Szene; ein bloßer Name wählt die gleichnamige Datei dort. "
+       "Splats mit Zentrum außerhalb ziehen bei Verlagerung und Wachstum mit "
+       "--roi-outside-weight statt 1, das Modell wächst dort also nicht weiter. Ein "
+       "partitionierter Lauf nutzt nur die Schnittmenge seines Teils mit der Region."),
+    FR("Un JSON de région : ce que l'éditeur de ROI enregistre dans le dossier roi du "
+       "jeu de données, ou toute autre région (boîtes, ellipsoïdes, cylindres, "
+       "contours, demi-espaces, le champ d'étiquettes d'une partition, combinés par "
+       "union, intersection et différence). Vide, le premier fichier de "
+       "<dataset>/roi est utilisé ; `off` entraîne toute la scène ; un simple nom y "
+       "choisit ce fichier. Les splats dont le centre est en dehors tirent, pour la "
+       "relocalisation et la croissance, avec --roi-outside-weight au lieu de 1 : le "
+       "modèle cesse d'y croître. Un entraînement partitionné n'en garde que "
+       "l'intersection avec sa partie."),
+    ES("Un JSON de región: lo que el editor de ROI guarda en la carpeta roi del "
+       "conjunto de datos, o cualquier región (cajas, elipsoides, cilindros, "
+       "contornos, semiespacios, el campo de etiquetas de una partición, combinados "
+       "con unión, intersección y diferencia). Vacío, se usa el primer archivo de "
+       "<dataset>/roi; `off` entrena toda la escena; un nombre solo elige ese "
+       "archivo allí. Los splats con el centro fuera sortean, para reubicación y "
+       "crecimiento, con --roi-outside-weight en vez de 1, así que el modelo deja de "
+       "crecer ahí. Una ejecución particionada usa solo su intersección con su parte."),
+    PT("Um JSON de região: o que o editor de ROI guarda na pasta roi do conjunto de "
+       "dados, ou qualquer região (caixas, elipsoides, cilindros, contornos, "
+       "semiespaços, o campo de rótulos de uma partição, combinados por união, "
+       "interseção e diferença). Vazio, usa-se o primeiro ficheiro de <dataset>/roi; "
+       "`off` treina a cena inteira; um nome simples escolhe esse ficheiro lá. Os "
+       "splats com o centro fora sorteiam, para realocação e crescimento, com "
+       "--roi-outside-weight em vez de 1, pelo que o modelo deixa de crescer aí. Um "
+       "treino particionado usa apenas a interseção com a sua parte."),
+    IT("Un JSON di regione: ciò che l'editor di ROI salva nella cartella roi del "
+       "dataset, o qualsiasi regione (scatole, ellissoidi, cilindri, contorni, "
+       "semispazi, il campo di etichette di una partizione, combinati con unione, "
+       "intersezione e differenza). Se vuoto si usa il primo file in <dataset>/roi; "
+       "`off` addestra l'intera scena; un nome semplice sceglie quel file lì. Gli "
        "splat con il centro fuori estraggono, per ricollocazione e crescita, con "
-       "--roi-outside-weight invece di 1, così il modello smette di crescere lì. "
-       "Un addestramento partizionato riceve la regione della sua parte senza "
-       "questo."),
-    NL("Een regio-JSON (dozen, bollen, halfruimten, het labelveld van een "
-       "partitie, gecombineerd met vereniging, doorsnede en verschil). Splats met "
-       "het middelpunt erbuiten loten bij verplaatsing en groei met "
-       "--roi-outside-weight in plaats van 1, zodat het model daar niet verder "
-       "groeit. Een gepartitioneerde run krijgt het gebied van zijn deel ook "
-       "zonder dit."),
-    RU("JSON области (коробки, сферы, полупространства, поле меток разбиения, "
-       "объединённые операциями объединения, пересечения и разности). Сплаты с "
-       "центром снаружи участвуют в выборке для перемещения и роста с весом "
-       "--roi-outside-weight вместо 1, так что модель там не растёт. "
-       "Разбитый запуск получает область своей части и без этого."),
-    TR("Bir bölge JSON'u (kutular, küreler, yarı uzaylar, bir bölümlemenin etiket "
-       "alanı; birleşim, kesişim ve farkla birleştirilmiş). Merkezi dışarıda "
-       "kalan splatlar yer değiştirme ve büyüme çekilişine 1 yerine "
-       "--roi-outside-weight ile girer; model orada büyümeyi bırakır. "
-       "Bölümlenmiş bir eğitim bunu vermeden parçasının bölgesini alır."));
+       "--roi-outside-weight invece di 1, così il modello smette di crescere lì. Un "
+       "addestramento partizionato usa solo l'intersezione con la sua parte."),
+    NL("Een regio-JSON: wat de ROI-editor in de roi-map van de dataset opslaat, of "
+       "elk ander gebied (dozen, ellipsoïden, cilinders, omtrekken, halfruimten, het "
+       "labelveld van een partitie, gecombineerd met vereniging, doorsnede en "
+       "verschil). Leeg wordt het eerste bestand in <dataset>/roi gebruikt; `off` "
+       "traint de hele scène; een losse naam kiest dat bestand daar. Splats met het "
+       "middelpunt erbuiten loten bij verplaatsing en groei met --roi-outside-weight "
+       "in plaats van 1, zodat het model daar niet verder groeit. Een "
+       "gepartitioneerde run gebruikt alleen de doorsnede met zijn deel."),
+    RU("JSON области: то, что редактор ROI сохраняет в папку roi набора данных, или "
+       "любая область (коробки, эллипсоиды, цилиндры, контуры, полупространства, "
+       "поле меток разбиения, объединённые операциями объединения, пересечения и "
+       "разности). Если пусто, берётся первый файл из <dataset>/roi; `off` обучает "
+       "всю сцену; одно имя выбирает этот файл там. Сплаты с центром снаружи "
+       "участвуют в выборке для перемещения и роста с весом --roi-outside-weight "
+       "вместо 1, так что модель там не растёт. Разбитый запуск использует только "
+       "пересечение своей части с областью."),
+    TR("Bir bölge JSON'u: ROI düzenleyicisinin veri kümesinin roi klasörüne "
+       "kaydettiği dosya ya da herhangi bir bölge (kutular, elipsoitler, silindirler, "
+       "ana hatlar, yarı uzaylar, bir bölümlemenin etiket alanı; birleşim, kesişim ve "
+       "farkla birleştirilmiş). Boş bırakılırsa <dataset>/roi içindeki ilk dosya "
+       "kullanılır; `off` tüm sahneyi eğitir; yalnızca bir ad oradaki o dosyayı "
+       "seçer. Merkezi dışarıda kalan splatlar yer değiştirme ve büyüme çekilişine 1 "
+       "yerine --roi-outside-weight ile girer; model orada büyümeyi bırakır. "
+       "Bölümlenmiş bir eğitim yalnızca parçasıyla kesişimini kullanır."));
 SS_MSG(roi_outside_weight,
     EN("Draw weight outside the region"), JA("領域外の抽選重み"),
     ZH_HANS("区域外的抽样权重"), ZH_HANT("區域外的抽樣權重"), KO("영역 밖 추첨 가중치"),
@@ -11330,47 +11803,60 @@ SS_MSG(quantization_level,
     NL("Precisie van de kleuropslag"), RU("Точность хранения цвета"),
     TR("Renk saklama duyarlığı"));
 SS_MSG(quantization_level_help,
-    EN("How compactly splat colors are stored during training. 1 roughly halves "
-       "the memory spent on view-dependent color with little visible difference; "
-       "0 keeps full precision."),
-    JA("学習中にスプラットの色をどれだけコンパクトに保存するかです。1 なら視点"
-       "依存の色に使うメモリがおおよそ半分になり、見た目の違いはほとんどありま"
-       "せん。0 なら完全な精度を保ちます。"),
-    ZH_HANS("训练期间泼溅颜色存储得有多紧凑。1 大致把视角相关颜色占用的内存减"
-            "半，肉眼几乎看不出差别；0 则保持完整精度。"),
-    ZH_HANT("訓練期間潑濺顏色儲存得有多緊湊。1 大致把視角相關顏色佔用的記憶體"
-            "減半，肉眼幾乎看不出差別；0 則保持完整精度。"),
-    KO("학습 중 스플랫 색을 얼마나 압축해 저장할지입니다. 1이면 시점 의존 색에"
-       " 쓰는 메모리가 대략 절반이 되고 눈에 띄는 차이는 거의 없습니다. 0이면"
-       " 완전한 정밀도를 유지합니다."),
-    DE("Wie kompakt Splatfarben während des Trainings gespeichert werden. 1 halbiert "
-       "den Speicher für blickabhängige Farbe ungefähr, bei kaum sichtbarem Unterschied; "
-       "0 behält volle Genauigkeit."),
-    FR("À quel point les couleurs des splats sont stockées de façon compacte "
-       "pendant l'entraînement. 1 divise à peu près par deux la mémoire consacrée "
-       "à la couleur dépendante de la vue, sans différence visible ; 0 conserve "
-       "la pleine précision."),
-    ES("Con cuánta compacidad se almacenan los colores de los splats durante "
-       "el entrenamiento. 1 reduce a la mitad, más o menos, la memoria dedicada "
-       "al color dependiente de la vista, con poca diferencia visible; 0 conserva "
-       "la precisión completa."),
-    PT("Com quanta compactação as cores dos splats são armazenadas durante o "
-       "treinamento. 1 reduz pela metade, mais ou menos, a memória gasta com "
-       "a cor dependente da vista, com pouca diferença visível; 0 mantém a precisão "
-       "total."),
-    IT("Con quanta compattezza vengono memorizzati i colori degli splat durante "
+    EN("How compactly colors are stored during training. 1 roughly halves the "
+       "memory spent on view-dependent color, and keeps the full-size images "
+       "between rendering and the loss at half precision, with little visible "
+       "difference; 0 keeps full precision."),
+    JA("学習中に色をどれだけコンパクトに保存するかです。1 なら視点依存の色に使う"
+       "メモリがおおよそ半分になり、描画から損失までのフルサイズ画像も半精度で"
+       "保持しますが、見た目の違いはほとんどありません。0 なら完全な精度を保ち"
+       "ます。"),
+    ZH_HANS("训练期间颜色存储得有多紧凑。1 大致把视角相关颜色占用的内存减半，"
+            "并以半精度保存从渲染到损失之间的全尺寸图像，肉眼几乎看不出差别；"
+            "0 则保持完整精度。"),
+    ZH_HANT("訓練期間顏色儲存得有多緊湊。1 大致把視角相關顏色佔用的記憶體減半，"
+            "並以半精度保存從渲染到損失之間的全尺寸圖像，肉眼幾乎看不出差別；"
+            "0 則保持完整精度。"),
+    KO("학습 중 색을 얼마나 압축해 저장할지입니다. 1이면 시점 의존 색에 쓰는"
+       " 메모리가 대략 절반이 되고, 렌더링부터 손실까지의 전체 크기 이미지를"
+       " 반정밀도로 유지하며, 눈에 띄는 차이는 거의 없습니다. 0이면 완전한"
+       " 정밀도를 유지합니다."),
+    DE("Wie kompakt Farben während des Trainings gespeichert werden. 1 halbiert "
+       "den Speicher für blickabhängige Farbe ungefähr und hält die Bilder in "
+       "voller Größe zwischen Rendern und Loss in halber Genauigkeit, bei kaum "
+       "sichtbarem Unterschied; 0 behält volle Genauigkeit."),
+    FR("À quel point les couleurs sont stockées de façon compacte pendant "
+       "l'entraînement. 1 divise à peu près par deux la mémoire consacrée à la "
+       "couleur dépendante de la vue et garde en demi-précision les images en "
+       "pleine taille entre le rendu et la perte, sans différence visible ; 0 "
+       "conserve la pleine précision."),
+    ES("Con cuánta compacidad se almacenan los colores durante el "
+       "entrenamiento. 1 reduce a la mitad, más o menos, la memoria dedicada al "
+       "color dependiente de la vista y guarda en media precisión las imágenes "
+       "a tamaño completo entre el renderizado y la pérdida, con poca diferencia "
+       "visible; 0 conserva la precisión completa."),
+    PT("Com quanta compactação as cores são armazenadas durante o treinamento. "
+       "1 reduz pela metade, mais ou menos, a memória gasta com a cor dependente "
+       "da vista e mantém em meia precisão as imagens em tamanho completo entre "
+       "a renderização e a perda, com pouca diferença visível; 0 mantém a "
+       "precisão total."),
+    IT("Con quanta compattezza vengono memorizzati i colori durante "
        "l'addestramento. 1 dimezza all'incirca la memoria spesa per il colore "
-       "dipendente dalla vista, con differenza appena visibile; 0 mantiene la "
-       "piena precisione."),
-    NL("Hoe compact splatkleuren tijdens de training worden opgeslagen. 1 halveert "
-       "ruwweg het geheugen voor kijkrichtingafhankelijke kleur, met nauwelijks "
-       "zichtbaar verschil; 0 behoudt volledige precisie."),
-    RU("Насколько компактно хранятся цвета сплатов во время обучения. 1 примерно "
-       "вдвое сокращает память под цвет, зависящий от вида, почти без видимой "
-       "разницы; 0 сохраняет полную точность."),
-    TR("Eğitim sırasında splat renklerinin ne kadar sıkışık saklandığı. 1, bakışa "
-       "bağlı renge harcanan belleği kabaca yarıya indirir ve gözle görülür bir "
-       "fark bırakmaz; 0 tam duyarlığı korur."));
+       "dipendente dalla vista e tiene a mezza precisione le immagini a "
+       "dimensione piena tra il rendering e la loss, con differenza appena "
+       "visibile; 0 mantiene la piena precisione."),
+    NL("Hoe compact kleuren tijdens de training worden opgeslagen. 1 halveert "
+       "ruwweg het geheugen voor kijkrichtingafhankelijke kleur en houdt de "
+       "beelden op volle grootte tussen rendering en loss op halve precisie, met "
+       "nauwelijks zichtbaar verschil; 0 behoudt volledige precisie."),
+    RU("Насколько компактно хранятся цвета во время обучения. 1 примерно вдвое "
+       "сокращает память под цвет, зависящий от вида, и держит полноразмерные "
+       "изображения между рендерингом и функцией потерь с половинной точностью, "
+       "почти без видимой разницы; 0 сохраняет полную точность."),
+    TR("Eğitim sırasında renklerin ne kadar sıkışık saklandığı. 1, bakışa bağlı "
+       "renge harcanan belleği kabaca yarıya indirir ve işleme ile kayıp "
+       "arasındaki tam boyutlu görüntüleri yarım duyarlıkta tutar; gözle görülür "
+       "bir fark bırakmaz. 0 tam duyarlığı korur."));
 
 SS_MSG(preallocate_splat_tensors,
     EN("Reserve memory up front"), JA("メモリを先に確保"),
@@ -12184,6 +12670,14 @@ SS_MSG(choice_point_mean,
     NL("gemiddelde van de puntenwolk"), RU("среднее облака точек"),
     TR("nokta bulutu ortalaması"));
 
+SS_MSG(choice_far_from_origin,
+    EN("when far from the origin"), JA("原点から遠いとき"), ZH_HANS("远离原点时"),
+    ZH_HANT("遠離原點時"), KO("원점에서 멀 때"), DE("wenn weit vom Ursprung"),
+    FR("si loin de l'origine"), ES("si está lejos del origen"),
+    PT("se estiver longe da origem"), IT("se lontana dall'origine"),
+    NL("als ver van de oorsprong"), RU("если далеко от начала координат"),
+    TR("başlangıçtan uzaksa"));
+
 SS_MSG(choice_camera_mean,
     EN("camera position mean"), JA("カメラ位置の平均"), ZH_HANS("相机位置平均"),
     ZH_HANT("相機位置平均"), KO("카메라 위치 평균"),
@@ -12409,6 +12903,7 @@ inline constexpr ChoiceText kChoiceText[] = {
     {"train_frame", "camera",     &choice_camera},
     {"train_frame", "points",     &choice_points},
 
+    {"scene_center", "auto",          &choice_far_from_origin},
     {"scene_center", "none",          &choice_none},
     {"scene_center", "point-median",  &choice_point_median},
     {"scene_center", "camera-median", &choice_camera_median},

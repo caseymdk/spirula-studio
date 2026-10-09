@@ -11,6 +11,7 @@
 // SfmRunner fills it by parsing the child's stdout; when the SfM module
 // becomes a library (docs/notes/sfm-port-plan.md phase 3) only that parser goes.
 
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -21,9 +22,9 @@ namespace gui {
 // The steps a dataset run goes through, in order. Both engines report through
 // the same list; a step a run does not need is never entered.
 enum class Stage {
-    Frames, Masks, Features, Matching, Mapping, Geometry, Finishing
+    Frames, Masks, Features, Matching, Mapping, Align, Dense, Geometry, Finishing
 };
-inline constexpr int kNumStages = 7;
+inline constexpr int kNumStages = 9;
 
 enum class StageStatus { Pending, Running, Done, Skipped, Failed };
 

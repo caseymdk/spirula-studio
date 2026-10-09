@@ -11,6 +11,8 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include <GLFW/glfw3.h>
+
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -48,7 +50,7 @@ struct Item {
 // is applied per frame, which is what keeps a move and the click after it in
 // separate frames -- the hover test between them is what makes the click land.
 struct Step {
-    enum class Kind { None, MousePos, MouseButton, Wheel, Key, Text, Focus };
+    enum class Kind { None, MousePos, MouseButton, Wheel, Key, Text, Focus, Drop };
     Kind kind = Kind::None;
     float x = 0, y = 0;
     int button = 0;
@@ -68,6 +70,7 @@ struct State {
     std::condition_variable cv;
 
     std::vector<Item> building;     // GUI thread only, the frame in flight
+    std::vector<std::string> dropped;   // GUI thread only, until take_drop()
     std::vector<Item> published;    // guarded by mu
     uint64_t frame_no = 0;          // guarded by mu
     float display_w = 0, display_h = 0, fb_scale = 1;
@@ -75,6 +78,8 @@ struct State {
 
     std::deque<Step> queue;         // guarded by mu
     uint64_t queued = 0, applied = 0;
+    ImVec2 pointer;
+    bool pointer_valid = false;
 
     bool want_shot = false;         // guarded by mu
     bool shot_ready = false;
@@ -582,6 +587,15 @@ HttpResponse handle_text(const HttpRequest& r) {
     return finish(r, enqueue(steps));
 }
 
+// Files dropped on the window, '\n'-separated in `paths=`.
+HttpResponse handle_drop(const HttpRequest& r) {
+    Step d;
+    d.kind = Step::Kind::Drop;
+    d.text = r.get("paths");
+    if (d.text.empty()) return err_json(400, "paths= is empty");
+    return finish(r, enqueue({d, Step{}}));
+}
+
 HttpResponse handle_wait(const HttpRequest& r) {
     const int frames = std::max(0, std::min(600, r.get_int("frames", 2)));
     std::vector<Step> steps((size_t)frames + 1, Step{});
@@ -684,6 +698,18 @@ namespace automation {
 
 bool armed() { return st().armed; }
 
+void name_item(unsigned id, const char* label) {
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    if (ctx && ctx->TestEngineHookItems)
+        ::ImGuiTestEngineHook_ItemInfo(ctx, id, label, ImGuiItemStatusFlags_None);
+}
+
+std::vector<std::string> take_drop() {
+    std::vector<std::string> out;
+    out.swap(st().dropped);
+    return out;
+}
+
 void set_state_source(std::function<std::string()> f) {
     st().state_source = std::move(f);
 }
@@ -716,6 +742,7 @@ void arm() {
     s.http.route("/ui/key", guard(handle_key));
     s.http.route("/ui/text", guard(handle_text));
     s.http.route("/ui/wait", guard(handle_wait));
+    s.http.route("/ui/drop", guard(handle_drop));
     s.http.route("/ui/screenshot", guard(handle_screenshot));
 
     try {
@@ -754,9 +781,21 @@ bool begin_frame() {
     }
 
     ImGuiIO& io = ImGui::GetIO();
+    if (popped) {
+        // Backend cursor events otherwise displace the scripted press in visible windows.
+        io.ClearEventsQueue();
+        if (step.kind == Step::Kind::MousePos) { s.pointer = {step.x,step.y}; s.pointer_valid = true; }
+        if (s.pointer_valid) io.AddMousePosEvent(s.pointer.x,s.pointer.y);
+    }
     switch (step.kind) {
         case Step::Kind::None: break;
-        case Step::Kind::MousePos: io.AddMousePosEvent(step.x, step.y); break;
+        case Step::Kind::MousePos:
+            if (GLFWwindow* window = glfwGetCurrentContext(); window && glfwGetWindowAttrib(window,GLFW_VISIBLE)) {
+                if (!glfwGetWindowAttrib(window,GLFW_FOCUSED)) glfwFocusWindow(window);
+                glfwSetCursorPos(window,step.x,step.y);
+            }
+            io.AddMousePosEvent(step.x, step.y);
+            break;
         case Step::Kind::MouseButton:
             io.AddMouseButtonEvent(step.button, step.down);
             break;
@@ -775,6 +814,13 @@ bool begin_frame() {
             io.AddInputCharactersUTF8(step.text.c_str());
             break;
         case Step::Kind::Focus: io.AddFocusEvent(true); break;
+        case Step::Kind::Drop:
+            for (size_t a = 0, b; a < step.text.size(); a = b + 1) {
+                b = step.text.find('\n', a);
+                if (b == std::string::npos) b = step.text.size();
+                if (b > a) s.dropped.push_back(step.text.substr(a, b - a));
+            }
+            break;
     }
 
     if (popped) {

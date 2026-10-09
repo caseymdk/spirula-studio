@@ -165,11 +165,13 @@ struct ColmapJob {
     // The photographs' colour space; masking and geometry convert to sRGB.
     std::string image_gamut;
     std::optional<bool> image_is_linear;
+    std::string image_exposure;
 
     // Depth and normals, written after the reconstruction from the dataset it
     // produced. Shared with the built-in path (SfmJob), which runs the same
     // child over the same folder.
     GeometryJob geometry;
+    DenseJob dense;
 };
 
 class ColmapRunner {
@@ -200,6 +202,7 @@ private:
     void take_reconstruction(ColmapJob& job);
     void take_masking(PrepJob& prep);
     void take_geometry(ColmapJob& job);
+    void take_dense(ColmapJob& job);
     void log(const std::string& line, bool detail = true);
     int  exec(const std::vector<std::string>& argv);
     void set_stage(Stage st, const std::string& s);

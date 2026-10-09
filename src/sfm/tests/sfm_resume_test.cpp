@@ -64,6 +64,24 @@ static void testSignatures(int& fails) {
         parseCameraOverride("cam0=opencv-fisheye", OverrideKind::Model, c.camera.overrides);
         check(stageSignature(c, CMD_MATCH) != mat0, "a per-group lens moves matching", fails);
     }
+    // A rig's mates are matched too, so the rig is part of what matching made.
+    {
+        SfmConfig c = base;
+        RigDef d;
+        parseRigArg("cam0,cam1", d);
+        c.rigs.push_back(d);
+        const std::string with_rig = stageSignature(c, CMD_MATCH);
+        check(with_rig != mat0, "a rig moves matching", fails);
+        check(stageSignature(c, CMD_EXTRACT) == ext0, "a rig leaves extraction", fails);
+        parseRigArg("dual-fisheye=cam0,cam1", c.rigs[0]);
+        check(stageSignature(c, CMD_MATCH) != with_rig, "which way its lenses face moves it",
+              fails);
+        c.rig_pairs = false;
+        SfmConfig off = base;
+        off.rig_pairs = false;
+        check(stageSignature(c, CMD_MATCH) == stageSignature(off, CMD_MATCH),
+              "without rig pairs a rig leaves matching", fails);
+    }
     // How fast the stage runs is not what it produces.
     {
         SfmConfig c = base;

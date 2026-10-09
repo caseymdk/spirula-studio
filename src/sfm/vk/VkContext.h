@@ -58,6 +58,25 @@ inline bool hasDeviceExtension(VkPhysicalDevice phys, const char* name) {
     return false;
 }
 
+// Width for the kernels whose two RDNA widths differ, GPU time at that width over
+// the other on a Ryzen 7000 iGPU (RADV RDNA2, 2026-10-08); 0 leaves it to the
+// driver. Nothing here uses subgroup operations, so any width is correct.
+inline uint32_t rdnaSubgroupWidth(const std::string& entry) {
+    static const std::pair<const char*, uint32_t> kWidths[] = {
+        {"blur_dog", 32},     // 0.91
+        {"descriptor", 32},   // 0.88
+        {"orient", 32},       // 0.98
+        {"extrema", 64},      // 0.67
+        {"upsample", 64},     // 0.83
+        {"downsample", 64},   // 0.73
+        {"match_pair", 64},   // 0.99
+        {"reduce_cols", 64},  // 0.66
+    };
+    for (const auto& w : kWidths)
+        if (entry == w.first) return w.second;
+    return 0;
+}
+
 // A driver implementing only a subset of Vulkan (MoltenVK, the sole driver on
 // macOS) stays hidden from vkEnumeratePhysicalDevices unless the instance opts
 // in, and vkCreateInstance fails with VK_ERROR_INCOMPATIBLE_DRIVER when it is
@@ -320,9 +339,20 @@ public:
         std::vector<const char*> instExts;
         vkEnablePortability(ici, instExts);
         const char* layers[] = {"VK_LAYER_KHRONOS_validation"};
-        if (opt.validate) {
-            ici.enabledLayerCount = 1;
-            ici.ppEnabledLayerNames = layers;
+        if (opt.validate || spirula::env_on("VK_VALIDATION")) {
+            uint32_t n = 0;
+            vkEnumerateInstanceLayerProperties(&n, nullptr);
+            std::vector<VkLayerProperties> props(n);
+            vkEnumerateInstanceLayerProperties(&n, props.data());
+            const bool present = std::any_of(props.begin(), props.end(), [&](const VkLayerProperties& p) {
+                return std::strcmp(p.layerName, layers[0]) == 0;
+            });
+            if (present) {
+                ici.enabledLayerCount = 1;
+                ici.ppEnabledLayerNames = layers;
+            } else {
+                std::fprintf(stderr, "[vk_ba] validation requested but %s is not installed\n", layers[0]);
+            }
         }
         VK_CHECK(vkCreateInstance(&ici, nullptr, &instance_));
 
@@ -341,6 +371,15 @@ public:
         caps_ = queryCaps(phys_);
         VkPhysicalDeviceProperties props{};
         vkGetPhysicalDeviceProperties(phys_, &props);
+        {
+            VkPhysicalDeviceMaintenance3Properties m3{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES};
+            VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+            p2.pNext = &m3;
+            vkGetPhysicalDeviceProperties2(phys_, &p2);
+            maxBufferBytes_ = std::min<VkDeviceSize>(props.limits.maxStorageBufferRange,
+                                                     m3.maxMemoryAllocationSize);
+        }
         sfm::slog::out(
             sfm::slog::Tag::Device, spirula::i18n::msg::sfm::device_using,
             {deviceName_ + " [" + selector_ + "]"});
@@ -424,6 +463,31 @@ public:
             exts.push_back(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
         }
 
+        // Only where the range holds both 32 and 64 (RDNA): Intel's compiler
+        // picks its own width per kernel, and pinning it would overrule that.
+        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT fSgc{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+        if (hasDeviceExtension(phys_, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2 sf2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+            sf2.pNext = &fSgc;
+            vkGetPhysicalDeviceFeatures2(phys_, &sf2);
+            VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sp{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
+            VkPhysicalDeviceProperties2 sp2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+            sp2.pNext = &sp;
+            vkGetPhysicalDeviceProperties2(phys_, &sp2);
+            pinWidths_ = fSgc.subgroupSizeControl &&
+                         (sp.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) &&
+                         sp.minSubgroupSize <= 32 && sp.maxSubgroupSize >= 64;
+        }
+        if (pinWidths_) {
+            fSgc = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+            fSgc.subgroupSizeControl = VK_TRUE;
+            fSgc.pNext = feat2.pNext;
+            feat2.pNext = &fSgc;
+            exts.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        }
+
         VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dci.pNext = &feat2;
         dci.queueCreateInfoCount = 1;
@@ -498,7 +562,16 @@ public:
     }
 
     bool initialized() const { return device_ != VK_NULL_HANDLE; }
-    bool hasPipeline(const std::string& name) const { return pipelines_.count(name) != 0; }
+    bool hasPipeline(const std::string& name) const { return pipelines_.count(key(name)) != 0; }
+
+    // Specialization constants 0, 1, ... of every pipeline loaded or dispatched
+    // from here on; each set of values keeps pipelines of its own. Empty is the
+    // module's defaults.
+    void setSpecialization(std::vector<uint32_t> v) {
+        spec_ = std::move(v);
+        specKey_.clear();
+        for (uint32_t x : spec_) specKey_ += "#" + std::to_string(x);
+    }
 
     void upload(const GpuBuffer& dst, const void* src, VkDeviceSize size, VkDeviceSize dstOff = 0) {
         if (pendingReadsStaging_) waitPending();
@@ -693,18 +766,28 @@ public:
         // entry points that cost more than 100 ms, which is how you find out
         // that one kernel is carrying the whole bill.
         const bool prof = spirula::env("SFM_MAP_PROF") != nullptr;
+        std::vector<VkSpecializationMapEntry> specEntries;
+        for (uint32_t i = 0; i < spec_.size(); i++)
+            specEntries.push_back({i, i * (uint32_t)sizeof(uint32_t), sizeof(uint32_t)});
+        const VkSpecializationInfo specInfo{(uint32_t)specEntries.size(), specEntries.data(),
+                                            spec_.size() * sizeof(uint32_t), spec_.data()};
         for (const auto& e : entries) {
-            if (pipelines_.count(e)) continue;
+            if (pipelines_.count(key(e))) continue;
             auto t0 = std::chrono::steady_clock::now();
             VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
             cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
             cpi.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
             cpi.stage.module = shaderModule_;
             cpi.stage.pName = e.c_str();
+            cpi.stage.pSpecializationInfo = spec_.empty() ? nullptr : &specInfo;
+            VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT rss{
+                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT};
+            if (pinWidths_) rss.requiredSubgroupSize = rdnaSubgroupWidth(e);
+            if (rss.requiredSubgroupSize) cpi.stage.pNext = &rss;
             cpi.layout = pipeLayout_;
             VkPipeline p;
             VK_CHECK(vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &cpi, nullptr, &p));
-            pipelines_[e] = p;
+            pipelines_[key(e)] = p;
             if (prof) {
                 double dt = std::chrono::duration<double>(
                                 std::chrono::steady_clock::now() - t0).count();
@@ -738,7 +821,7 @@ public:
 
     void dispatch(VkCommandBuffer cb, const std::string& name, uint32_t gx, const Push& push,
                   uint32_t gy = 1) {
-        auto it = pipelines_.find(name);
+        auto it = pipelines_.find(key(name));
         if (it == pipelines_.end()) throw std::runtime_error("unknown pipeline " + name);
         vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, it->second);
         vkCmdPushConstants(cb, pipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
@@ -839,6 +922,10 @@ public:
 
     VkDevice device() const { return device_; }
     double totalAllocatedMB() const { return totalAllocated_ / (1024.0 * 1024.0); }
+    // The largest buffer a kernel may bind: maxStorageBufferRange (4 GB on
+    // NVIDIA, which wraps an access past it rather than failing) and the
+    // allocation limit (4 GB on RADV), whatever VRAM is free.
+    VkDeviceSize maxBufferBytes() const { return maxBufferBytes_; }
     double deviceLocalHeapMB() const {
         VkDeviceSize best = 0;
         for (uint32_t i = 0; i < memProps_.memoryHeapCount; i++)
@@ -1009,7 +1096,10 @@ private:
         VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         mai.allocationSize = req.size;
         mai.memoryTypeIndex = typeIdx;
-        VK_CHECK(vkAllocateMemory(device_, &mai, nullptr, &b.mem));
+        if (const VkResult r = vkAllocateMemory(device_, &mai, nullptr, &b.mem); r != VK_SUCCESS) {
+            vkDestroyBuffer(device_, b.buf, nullptr);
+            throw VkError(r, vkErrorText(r, SS_FILE, __LINE__));
+        }
         VK_CHECK(vkBindBufferMemory(device_, b.buf, b.mem, 0));
         allocations_.emplace_back(b.buf, b.mem);
         return b;
@@ -1018,6 +1108,7 @@ private:
     VkInstance instance_ = VK_NULL_HANDLE;
     VkPhysicalDevice phys_ = VK_NULL_HANDLE;
     VkDeviceCaps caps_{};
+    bool pinWidths_ = false;  // rdnaSubgroupWidth() applies
     std::string selector_;   // canonical uuid:<hex> of phys_, empty before init
     std::string deviceName_;
     uint8_t deviceUUID_[VK_UUID_SIZE] = {};
@@ -1037,7 +1128,11 @@ private:
     VkDescriptorSet descSet_ = VK_NULL_HANDLE;
     uint32_t descBindingCount_ = 0;
     VkShaderModule shaderModule_ = VK_NULL_HANDLE;
-    std::map<std::string, VkPipeline> pipelines_;
+    std::map<std::string, VkPipeline> pipelines_;   // by key(): entry name + specKey_
+    std::vector<uint32_t> spec_;
+    std::string specKey_;
+    VkDeviceSize maxBufferBytes_ = ~VkDeviceSize(0);
+    std::string key(const std::string& name) const { return name + specKey_; }
     GpuBuffer staging_, stagingDl_;
     void* stagingPtr_ = nullptr;
     void* stagingDlPtr_ = nullptr;

@@ -72,7 +72,8 @@ a file's include lines tell you which subsystems it depends on.
 src/
 ├── core/                   Tensor.h, Camera.h, Common.cuh, GradQuant.cuh, …
 │                             GraphCut.h -- the normalized cut the SfM mapper
-│                             and the scene partitioner both use
+│                             and the scene partitioner both use; HostMemory.h
+│                             -- physical, available and per-process RAM
 │                             the types and device helpers everything uses
 ├── primitives/             Primitive*.cuh — 3DGS / Mip / 3DGUT traits
 │                             (compile-time types, not runtime branches)
@@ -85,13 +86,17 @@ src/
 ├── engine/                 Engine*.cpp/.h — the training engine
 │                             (process-global singleton)
 ├── data/                   DataManager (image cache / prefetch / warp),
+│   │                         E57Reader (laser scans: points + registered images),
+│   │                         PointCloudFile (E57 / LAS / PLY points, streamed)
 │   │                         Region.h / LabelField.h / RegionProgram.h (regions
 │   │                         of space with an inside test on host and device,
 │   │                         and the labelled seed field that gives every point
 │   │                         one owner), RegionMesh.h (a region's boundary as
 │   │                         triangles, for drawing), ScenePartition.h (split a scene into
 │   │                         parts that train separately -- READ
-│   │                         docs/notes/scene-partition.md)
+│   │                         docs/notes/scene-partition.md), RoiDocument.h (the
+│   │                         ROI editor's shape list, and which <dataset>/roi/*.json
+│   │                         a run trains in -- docs/notes/roi-editor.md)
 │   └── parsers/              COLMAP / Nerfstudio / Metashape readers
 ├── mesh/                   meshing pipeline: Delaunay3D, UV, export/import, and
 │                             MeshingDevice.h -- the DEVICE SEAM the portable
@@ -118,6 +123,12 @@ src/
 ├── loma/                   LoMa: DaD keypoints + DeDoDe descriptors + the LoMa
 │                             matcher, on top of nn/. The other learned SfM
 │                             frontend -- READ src/loma/README.md
+├── roma/                   native RoMa v2 dense correspondence inference on nn/
+│                             -- READ src/roma/README.md
+├── dense/                  fixed-camera reconstruction, disk-backed observations,
+│                             fusion and source-frame PLY -- READ src/dense/README.md
+│                             (its own library, ss_dense, outside the engine: the
+│                              trainer reads only the header-only Artifact.h)
 ├── metric3d/               Metric3D v2 depth + normals, on top of nn/
 │                             -- READ src/metric3d/README.md
 ├── moge/                   MoGe-2 point maps + normals + a sky mask, on top of
@@ -145,9 +156,21 @@ src/
 │   ├── cli/                main.cpp (`spirula train`), mesh_main.cpp (mesh),
 │   │                         sfm_main.cpp (sfm), sam_main.cpp (sam),
 │   │                         geometry_main.cpp (depth + normals)
+│   │                         dense_main.cpp (RoMa point cloud; docs/dense.md)
 │   ├── FrameExtract.{h,cpp}  video -> sharp frames (`spirula sam extract` also
 │   │                         masks them in the same pass; the GUI masks after),
 │   │                         decoded by Vulkan Video or ffmpeg (FrameDecode.h)
+│   ├── E57Dataset.{h,cpp}  an E57 scan written out as a Nerfstudio dataset
+│   │                         with no SfM (`spirula e57`) -- docs/datasets.md
+│   ├── LidarAlign.{h,cpp}  a reconstruction fitted onto a laser scan (Sim3:
+│   │                         anchors, then point-to-plane ICP), and scans in
+│   │                         frames of their own placed through it
+│   ├── LidarDataset.{h,cpp} the dataset that makes (`spirula lidar`, the
+│   │                         dataset screen's Align step): one COLMAP model in
+│   │                         the scan frame, scan seeds with tracks, depth +
+│   │                         normals -- docs/notes/lidar-alignment.md
+│   ├── ScanDepth.{h,cpp}   depth, normal and colour maps of a camera,
+│   │                         rendered from a scan's points
 │   ├── Pano360.{h,cpp}     a 360 camera's own frame layout (the GoPro MAX
 │   │                         .360 EAC packing) and the views a dataset wants
 │   │                         out of it -- one implementation, both decode paths
@@ -580,6 +603,13 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   `kernels/bilagrid/BilagridConfig.cuh` for the 3D case) and pass the fold
   factor to the kernel. Related: the bilagrid samplers index cells with
   int32, which `engine_init_bilagrid_*` enforces up front.
+- **An SfM buffer bound past 4 GB is corrupted, not refused.** `src/sfm/`
+  binds storage buffers through descriptors (the other runtimes use device
+  addresses), and NVIDIA's `maxStorageBufferRange` is 4 GB: an access past it
+  wraps. Bundle adjustment's Jacobians reach that at ~10M observations, which
+  stalled every large solve until they were split (`sfm/ba/README.md`,
+  "Buffers past 4 GB"). A new per-observation buffer needs the same split, or
+  the refusal in `BundleSolver::decidePaths` that sends the solve to the host.
 - **Some pool buffers do not own their memory.** A slot listed in
   `POOL_ALIAS_TABLE` (`core/PoolSlots.h`) is a slice of one arena that every
   `PoolPhase` reuses, so the arena costs the largest phase rather than the sum
@@ -646,6 +676,28 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   (Apache-2.0) and BiRefNet (MIT) are fetched the same way for consistency. They are fetched
   at run time after the user has seen the terms -- `src/app/gui/ModelCache.cpp`
   is where that policy lives, and it is the only place that should grow one.
+- **A gated download is ASKED about, in the GUI and on a terminal.** Every family
+  (SAM 3, SAM 2.1, Grounding DINO, BiRefNet) has its verbatim text in `LICENSES/`,
+  embedded by `tools/gen_license_texts.py`, and is accepted in one place:
+  `core/LicenseConsent.h`'s `accepted_license=` lines of gui.conf. A model with
+  licences of its own (RoMa: `roma`) adds its terms in `app/ModelLicenses.h`,
+  which Main.cpp and the GUI register at startup, and gives the GUI its wording
+  with `register_license_info()`. The GUI shows the
+  whole text with a required "I have read and accept the terms of <name>" tick
+  for EVERY family (`accept_enabled`), and a download continues by itself once it
+  is accepted; a batch asks for every family up front (`GuiApp::begin_batch`),
+  never mid-run.
+  Anything that starts a download with a `license_family` goes through
+  `GuiApp::request_licenses` / `start_downloads_with_consent`;
+  `FileDownload::start`'s refusal is only a backstop. On a terminal,
+  `app::require_license` (`app/cli/LicenseCli.h`) prints the terms and asks for
+  `yes`; without one (a script, or SS_NO_AUTO_FETCH set) the CLI refuses, naming
+  `--accept-license <family>=yes`. `nn::ensure_file` only calls the gate the
+  application installs (`app::install_license_gate()`), so the inference layer
+  knows no terms, and it gates the download only: a copy already in the cache
+  loads as before. A SAM checkpoint named with `--model` is gated by its file name
+  (`app/cli/ModelLicense.h`). End to end: `tools/license_checks/cli_prompt_gate.py`
+  (a pty) and `license_prompt_gate.py` (guictl).
 - **The inference layer's VRAM pool is process-wide and grow-only**, so
   destroying a `sam::Session` frees nothing by itself and a 2 GB checkpoint
   stays resident until the process exits. `Session::unload()` (called by the

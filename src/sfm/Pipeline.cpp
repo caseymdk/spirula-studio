@@ -33,7 +33,7 @@
 
 #include "core/ColorSpace.h"
 #include "core/Env.h"
-#include "core/ExrImage.h"
+#include "core/ImageFile.h"
 #include "sfm/core/Cancel.h"
 #include "sfm/core/Events.h"
 #include "sfm/core/Exif.h"
@@ -604,7 +604,7 @@ void calibrateSensorPriorsFromDatabase(TelemetryPriors& priors, const MatchesDat
         if (p.config != (int)TwoViewConfig::Uncalibrated) continue;
         if (!priors.calibrationPair(p.image1, p.image2)) continue;
         pairs.emplace_back(p.image1, p.image2);
-        matches.push_back(p.matches);
+        matches.push_back(p.matches.toVector());
     }
     calibrateSensorPriorsFrom(priors, feats, pairs, matches, cams, tvopt, threads, verbose, true);
 }
@@ -830,11 +830,11 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
     return true;
 }
 
-// An EXR carries its own colour space. Reading it needs no declaration -- the
-// decoder falls back to the file's own -- but --point-color and the reported
-// space both do, so adopt it before any stage runs.
-void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
-                        const std::set<std::string>& seen) {
+// An EXR's header or a TIFF's ICC profile carries the colour space. Reading
+// needs no declaration -- the decoder falls back to the file's own -- but
+// --point-color and the reported space both do, so adopt it before any stage.
+void adoptFileColorSpace(SfmConfig& cfg, const std::string& imagedir,
+                         const std::set<std::string>& seen) {
     const bool take_gamut = !seen.count("image-gamut");
     const bool take_linear = !seen.count("image-linear");
     if (!take_gamut && !take_linear) return;
@@ -845,18 +845,40 @@ void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
         if (!it->is_regular_file(ec)) continue;
         if (!isImageExt(it->path().extension().string()) || isSidecar(it->path()))
             continue;
-        exr::Info info;
-        if (!exr::declared_color_space(it->path().string(), info)) return;
-        if (take_gamut) cfg.image_gamut = info.gamut;
-        if (take_linear) cfg.image_is_linear = info.is_linear;
+        imagefile::DeclaredColor d;
+        if (!imagefile::declared_color_space(it->path().string(), d)) return;
+        if (take_gamut) cfg.image_gamut = d.gamut;
+        if (take_linear) cfg.image_is_linear = d.is_linear;
         const std::string name =
             cfg.image_gamut.empty() ? "Rec.709" : cfg.image_gamut;
-        if (take_linear) L::out(Tag::Run, M::run_exr_color, {name});
-        else             L::out(Tag::Run, M::run_exr_gamut_from_file, {name});
-        if (take_gamut && !info.gamut_known)
-            L::warn(Tag::Run, M::run_exr_gamut_unknown, {});
+        if (take_linear)
+            L::out(Tag::Run, cfg.image_is_linear ? M::run_file_color_linear
+                                                 : M::run_file_color_display,
+                   {d.format, name});
+        else
+            L::out(Tag::Run, M::run_file_gamut_from_file, {d.format, name});
+        if (take_gamut && !d.gamut_known)
+            L::warn(Tag::Run, M::run_file_gamut_unknown, {d.format});
         return;
     }
+}
+
+// What the detectors were shown, and a linear capture that never passed white:
+// the give-away of display-encoded pixels read as linear (docs/notes/exr.md).
+void reportDecodedLight(const SfmConfig& cfg, const ExtractStats& stats) {
+    if (!stats.decoded) return;
+    auto stops = [](float gain) {
+        char buf[16];
+        std::snprintf(buf, sizeof buf, "%+.1f", std::log2(gain));
+        return std::string(buf);
+    };
+    if (cfg.exposure.automatic)
+        L::out(Tag::Extract, M::extract_exposure_auto,
+               {stops(stats.gain_min), stops(stats.gain_max)});
+    else if (cfg.exposure.active())
+        L::out(Tag::Extract, M::extract_exposure_fixed, {stops(stats.gain_max)});
+    if (cfg.image_is_linear && stats.peak == 1.0f)
+        L::warn(Tag::Extract, M::extract_linear_peak_one, {});
 }
 
 void reportFeatureCompaction(const FeatureCompactionStats& stats) {
@@ -1203,7 +1225,7 @@ void printAssembly(const AssembleStats& ast, size_t models, Tag tag) {
            {format_duration(ast.finishSecs()), (long long)f.splits,
             (long long)f.duplicate_splits, (long long)f.reseeded_models,
             (long long)f.dropped_redundant, (long long)f.audited_repaired,
-            (long long)f.audited_out});
+            (long long)f.audited_out, (long long)f.seams_welded});
 }
 
 // Flat or bottom-up, per --mapper; flat is the default and what the
@@ -1431,24 +1453,28 @@ void sweepStaleFeatures(const fs::path& outdir, const std::set<fs::path>& live) 
     for (const fs::path& p : dead) fs::remove(p, ec);
 }
 
-// Is `feat` a whole feature file that describes `img` as it stands now? An
-// mtime comparison, because a re-run that regenerated the frames or the masks
-// leaves everything else about the settings identical.
+// Is `feat` a whole feature file that describes `img` as it stands now? By
+// mtime: regenerated frames or masks leave the settings identical. Given
+// `older`, a whole file with a newer image or mask passes and sets it.
 bool featuresAreCurrent(const fs::path& feat, const fs::path& img,
                         const std::string& mask, const std::string& feature_mask,
-                        uint32_t& count) {
+                        uint32_t& count, bool* older = nullptr) {
     std::error_code fe, ie, me;
     const auto t = fs::last_write_time(feat, fe);
-    if (fe || t < fs::last_write_time(img, ie) || ie) return false;
+    if (fe) return false;
+    bool stale = t < fs::last_write_time(img, ie) || ie;
     for (const std::string* m : {&mask, &feature_mask})
-        if (!m->empty() && t < fs::last_write_time(*m, me) && !me) return false;
+        stale = stale || (!m->empty() && t < fs::last_write_time(*m, me) && !me);
+    if (stale && !older) return false;
+    if (older) *older = stale;
     return peekFeatures(feat.string(), count);
 }
 
 }  // namespace
 
 int extractDirectory(const std::string& imagedir, const fs::path& outdir,
-                     const SfmConfig& cfg, ExtractStats& stats, bool reuse) {
+                     const SfmConfig& cfg, ExtractStats& stats, bool reuse,
+                     std::vector<fs::path>* trusted) {
     const SiftOptions& opt = cfg.sift;
     const std::string& maskdir = cfg.mask_dir;
     const std::string& fmaskdir = cfg.feature_mask_dir;
@@ -1521,6 +1547,7 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
     lopt.want_color = true;  // sample per-keypoint colors while the image is hot
     lopt.gamut = cfg.image_gamut;
     lopt.is_linear = cfg.image_is_linear;
+    lopt.exposure = cfg.exposure;
     lopt.flip_mask = cfg.flip_mask;
     lopt.apply_exif_orientation = cfg.exif_orientation == "apply";
     if (cfg.decode_budget_mb > 0)
@@ -1596,10 +1623,13 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
             const std::string fmask = k < lopt.feature_mask_paths.size()
                                           ? lopt.feature_mask_paths[k]
                                           : std::string();
-            if (!featuresAreCurrent(outs[k], paths[k], mask, fmask, count)) {
+            bool older = false;
+            if (!featuresAreCurrent(outs[k], paths[k], mask, fmask, count,
+                                    trusted ? &older : nullptr)) {
                 todo.push_back(k);
                 continue;
             }
+            if (older) trusted->push_back(outs[k]);
             stats.reused++;
             stats.features += count;
             stats.images++;
@@ -1716,6 +1746,10 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
     };
     SerialWorker post;  // after postProcess: joined before it goes away
     auto extractOne = [&](size_t k, GrayImage& img, const GrayImage* next) {
+        stats.gain_min = stats.decoded ? std::min(stats.gain_min, img.gain) : img.gain;
+        stats.gain_max = stats.decoded ? std::max(stats.gain_max, img.gain) : img.gain;
+        stats.peak = std::max(stats.peak, img.peak);
+        stats.decoded++;
         FeatureSet f = ext->extractAhead(img, next);
         std::vector<float>().swap(img.data);  // the worker needs color, not luma
         post.submit([&postProcess, k, img = std::move(img), f = std::move(f)]() mutable {
@@ -1742,6 +1776,7 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
         extractOne(held->first, held->second, nullptr);
     }
     post.finish();
+    reportDecodedLight(cfg, stats);
     events::stage_end(Stage::Extract);
     return 0;
 }
@@ -1785,7 +1820,8 @@ int loadFeatureDir(const std::string& featdir, const SfmConfig& cfg, bool with_d
             pool.emplace_back([&] {
                 for (size_t i = next++; i < files.size(); i = next++) {
                     try {
-                        feats[i] = readFeatures(files[i].string(), with_descriptors);
+                        feats[i] = readFeatures(files[i].string(), with_descriptors,
+                                                /*map=*/true);
                     } catch (const std::exception& e) {
                         std::lock_guard<std::mutex> lk(err_mtx);
                         if (first_error.empty()) first_error = e.what();
@@ -1966,7 +2002,7 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
     // workers finish out of order, so the journal is not in the list's order.
     std::unordered_map<uint64_t, TwoViewMatches> done_kept;
     std::vector<uint64_t> done_keys;
-    const fs::path journal_path = res ? res->dir / "matches.part" : fs::path();
+    const fs::path journal_path = res ? res->dir / resume::kMatchJournal : fs::path();
     const bool resumed_verify =
         res && verify &&
         resume::readJournal(journal_path, res->signature, db.images, done_kept, done_keys,
@@ -2441,7 +2477,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         fs::path sibling = p.parent_path() / "masks";
         if (fs::is_directory(sibling)) cfg.mask_dir = sibling.string();
     }
-    adoptExrColorSpace(cfg, _imagedir, in.explicit_flags);
+    adoptFileColorSpace(cfg, _imagedir, in.explicit_flags);
 
     fs::path ws(_workspace);
     fs::create_directories(ws);
@@ -2471,23 +2507,32 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // run interrupted half way through leaves files the next one may reuse.
     const fs::path rdir = resume::dir(_workspace);
     const std::string extract_sig =
-        stageSignature(cfg, CMD_EXTRACT) + "images=" + _imagedir + "\n";
+        stageSignature(cfg, CMD_EXTRACT) + resume::kSignedImages + _imagedir + "\n";
+    // What the files on disk were recorded as made with, before this run
+    // records itself: matches over kept features were made under it.
+    const std::string old_extract = resume::recorded(rdir / resume::kExtractSig);
     std::error_code rm_ec;
-    bool reuse = cfg.reuse;
-    if (!reuse || resume::recorded(rdir / "extract.sig") != extract_sig) {
+    bool reuse = cfg.reuse && cfg.reuse_features != "redo";
+    const bool keep_features = reuse && cfg.reuse_features == "keep";
+    if (!reuse || (!keep_features && old_extract != extract_sig)) {
         // The pair list and the journal index the feature files, so they go
         // wherever those go.
         reuse = false;
         resume::clear(_workspace);
         fs::remove_all(featdir, rm_ec);
         fs::remove(matchpath, rm_ec);
+    } else if (old_extract != extract_sig && fs::is_directory(featdir, rm_ec) &&
+               !fs::is_empty(featdir, rm_ec)) {
+        L::out(Tag::Extract, M::extract_kept_other_settings, {featdir.string()});
     }
-    if (cfg.reuse) resume::store(rdir / "extract.sig", extract_sig);
+    if (cfg.reuse) resume::store(rdir / resume::kExtractSig, extract_sig);
 
     // ---- 1. extract ----
     double t0 = now();
     ExtractStats est;
-    if (int rc = extractDirectory(_imagedir, featdir, cfg, est, reuse)) {
+    std::vector<fs::path> trusted;
+    if (int rc = extractDirectory(_imagedir, featdir, cfg, est, reuse,
+                                  keep_features ? &trusted : nullptr)) {
         r.exit_code = rc;
         return r;
     }
@@ -2536,19 +2581,54 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // What this stage's output depends on: its own settings, the extraction
     // that produced its input, and the feature files themselves -- the pair
     // lists and the journal are indices into a particular set of those.
+    const std::string match_settings = stageSignature(cfg, CMD_MATCH) + "pairs-resolved=" +
+                                       std::to_string((int)mode) + "\n";
+    const std::string features_before = "features=" + featureDirDigest(featdir) + "\n";
+    // Kept features older than their image or mask are dated now, so the next
+    // run counts them current as well.
+    for (const fs::path& p : trusted)
+        fs::last_write_time(p, fs::file_time_type::clock::now(), rm_ec);
     MatchResume mres;
     mres.dir = rdir;
-    mres.signature = extract_sig + stageSignature(cfg, CMD_MATCH) +
-                     "pairs-resolved=" + std::to_string((int)mode) + "\n" +
-                     "features=" + featureDirDigest(featdir) + "\n";
+    mres.signature =
+        extract_sig + match_settings + "features=" + featureDirDigest(featdir) + "\n";
+    const std::string old_match = resume::recorded(rdir / resume::kMatchSig);
+    // Matches over features kept under other extraction settings are still
+    // theirs: the digest is of the files they index, as they were then.
+    const bool current =
+        old_match == mres.signature || old_match == old_extract + match_settings + features_before;
+    if (cfg.reuse_matches == "redo") {
+        resume::forget(rdir / resume::kMatchSig);
+        resume::forget(rdir / resume::kMatchJournal);
+        resume::forget(rdir / "pairs.bin");
+    }
+    // Kept whatever made them only over the very files they index: a feature
+    // file this run wrote numbers its keypoints anew.
+    const bool keep_matches = cfg.reuse_matches == "keep" && !current &&
+                              fs::exists(matchpath, rm_ec);
+    if (keep_matches && est.reused != est.images) {
+        L::warn(Tag::Match, M::match_keep_refused, {matchpath.string()});
+    }
     // A finished matches.bin is the whole of this stage; the mapper wants
     // keypoints and colours, so the descriptors are never read at all.
     bool reused_matches = false;
-    if (cfg.reuse && fs::exists(matchpath, rm_ec) &&
-        resume::recorded(rdir / "match.sig") == mres.signature) {
+    if (cfg.reuse && cfg.reuse_matches != "redo" && fs::exists(matchpath, rm_ec) &&
+        (current || (keep_matches && est.reused == est.images))) {
         try {
             MatchesDatabase disk = readMatches(matchpath.string());
-            if (loadFeatureDir(featdir.string(), cfg, /*with_descriptors=*/false, feats, db) == 0) {
+            bool loaded =
+                loadFeatureDir(featdir.string(), cfg, /*with_descriptors=*/false, feats, db) == 0;
+            bool same_images = loaded && disk.images.size() == db.images.size();
+            for (size_t i = 0; same_images && i < db.images.size(); i++)
+                same_images = disk.images[i].name == db.images[i].name &&
+                              disk.images[i].num_features == db.images[i].num_features;
+            if (loaded && !current && !same_images) {
+                L::warn(Tag::Match, M::match_keep_refused, {matchpath.string()});
+                feats.clear();
+                db = MatchesDatabase();
+                loaded = false;
+            }
+            if (loaded) {
                 db.pairs = std::move(disk.pairs);
                 db.cameras = std::move(disk.cameras);
                 db.camera_ids = std::move(disk.camera_ids);
@@ -2574,8 +2654,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         }
     }
     if (reused_matches) {
+        if (!current) L::out(Tag::Match, M::match_kept_other_settings, {matchpath.string()});
         L::out(Tag::Match, M::match_reusing_matches,
                {(long long)mstats.kept, matchpath.string()});
+        if (cfg.reuse && old_match != mres.signature)
+            resume::store(rdir / resume::kMatchSig, mres.signature);
     } else if (int rc = matchFeatureDir(featdir.string(), cfg, mode, /*verify=*/true, feats, db,
                                         mstats, &calib, cfg.reuse ? &mres : nullptr)) {
         r.exit_code = rc;
@@ -2586,18 +2669,16 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         writeMatches(matchpath.string(), db);
         // matches.bin says everything the journal and the pair list did, and
         // the journal is the same size again.
-        resume::forget(rdir / "matches.part");
+        resume::forget(rdir / resume::kMatchJournal);
         resume::forget(rdir / "pairs.bin");
-        if (cfg.reuse) resume::store(rdir / "match.sig", mres.signature);
+        if (cfg.reuse) resume::store(rdir / resume::kMatchSig, mres.signature);
     }
     // Nothing past this point reads a descriptor -- the mapper works on
     // keypoints, the correspondence graph and the per-keypoint colors -- and on
     // a large capture they are the biggest thing in the process: 8k features
     // per image at 128 bytes is a gigabyte per thousand images, held for the
     // whole of mapping for nothing.
-    for (FeatureSet& fs : feats) {
-        std::vector<uint8_t>().swap(fs.descriptors);
-    }
+    for (FeatureSet& fs : feats) fs.dropDescriptors();
     // After writeMatches, never before: the file on disk indexes the feature
     // files, which keep every row.
     if (cfg.compact_unused_features) {
@@ -2608,6 +2689,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         remapMatches(db, plan, feats);
         if (verbose) reportFeatureCompaction(plan.stats);
     }
+    // The pair lists are read a few times a run (seeds, seams, splits) and the
+    // graph built from them constantly, so past 256 MB they go to a file, mapped.
+    if (mstats.inliers * sizeof(FeatureMatch) > (256ull << 20))
+        spillMatches(db, (ws / ".spirula-matches.spill").string());
+    cfg.mapper.spill_dir = ws.string();
 
     // ---- 3. incremental mapping ----
     // The grouping and the focals the two-view stage settled on carry straight
@@ -2616,6 +2702,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // measurement is what stops small components inventing their own
     // intrinsics (D45/D46).
     MapperOptions& mapopt = cfg.mapper;
+    mapopt.seam_order_by_name = cfg.pairs == "sequential";
     const CameraSetup& cs = calib.cameras;
     mapopt.initial_cameras = cs.cameras;
     mapopt.known_focal_cameras = cs.focal_known;
@@ -2666,6 +2753,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     const size_t n_cameras = models.empty() ? 0 : models.front().cameras.size();
     splitCamerasBySize(models, feats);
     writeModels(models, sparsedir, verbose, gauge, &rigs);
+    // In the mapper's frame, not the gauge's: a scorer that aligns by Sim3 reads both alike.
+    if (!ast.pre_weld.empty()) {
+        resolveImageNames(ast.pre_weld, _imagedir);
+        writeModels(ast.pre_weld, sparsedir / "pre_weld", verbose, {}, &rigs);
+    }
 
     // The mapper reports its own breakdown when `run()` returns; the passes
     // that assemble its models accumulate into the same counters.

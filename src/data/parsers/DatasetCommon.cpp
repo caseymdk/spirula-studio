@@ -12,7 +12,9 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -125,7 +127,9 @@ double compute_normalized_transform(const double* c2w, int64_t n,
             max_abs = std::max(max_abs,
                 std::abs(R[r][0]*d[0] + R[r][1]*d[1] + R[r][2]*d[2]));
     }
-    double scale_factor = 1.0 / std::max(max_abs, 1e-12);
+    // Cameras all in one place (one photo, a tripod's turn) have no size to
+    // fit, and 1/1e-12 leaves train_to_normalized singular in float.
+    const double scale_factor = max_abs > 1e-9 ? 1.0 / max_abs : 1.0;
 
     // T_n_from_camera = scale * [R_align | -R_align @ center]
     for (int r = 0; r < 3; r++) {
@@ -501,6 +505,43 @@ std::array<double, 3> scene_center(CenterMode mode, const double* c2w, int64_t n
 }
 
 namespace {
+// Whether |c| exceeds `threshold` times the median distance of `pos` to c.
+bool far_from_origin(const double* pos, int64_t n, const std::array<double, 3>& c,
+                     float threshold, int64_t step) {
+    std::vector<double> dist;
+    dist.reserve((size_t)(n / step + 1));
+    for (int64_t i = 0; i < n; i += step) {
+        const double dx = pos[i*3] - c[0], dy = pos[i*3+1] - c[1], dz = pos[i*3+2] - c[2];
+        dist.push_back(std::sqrt(dx*dx + dy*dy + dz*dz));
+    }
+    const double radius = median_of(dist);
+    return std::sqrt(c[0]*c[0] + c[1]*c[1] + c[2]*c[2]) > (double)threshold * radius;
+}
+}  // namespace
+
+ResolvedCenter resolve_scene_center(const std::string& name, float auto_threshold,
+                                    const double* c2w, int64_t n,
+                                    const double* points, int64_t m) {
+    if (name != "auto") {
+        const CenterMode mode = center_mode_from_name(name);
+        return {mode, scene_center_t(mode, c2w, n, points, m, 3, 0)};
+    }
+    // Cameras first: there are few of them, and most datasets stop here.
+    if (n > 0) {
+        const std::vector<double> cams = camera_positions(c2w, n);
+        const std::array<double, 3> c = geometric_median_t(cams.data(), n, 3, 0);
+        if (!far_from_origin(cams.data(), n, c, auto_threshold, 1)) return {};
+        if (m <= 0) return {CenterMode::CameraMedian, c};
+    }
+    if (m <= 0) return {};
+    // A verdict needs a radius, not every point: sampled as a viewport centre is.
+    constexpr int64_t kSamples = 1 << 18;
+    const std::array<double, 3> c = geometric_median_t(points, m, 3, kSamples);
+    if (!far_from_origin(points, m, c, auto_threshold, sample_step(m, kSamples))) return {};
+    return {CenterMode::PointMedian, m <= kSamples ? c : geometric_median_t(points, m, 3, 0)};
+}
+
+namespace {
 template <typename T>
 CenterTable scene_centers_t(const double* c2w, int64_t n, const T* points,
                             int64_t m, int stride, const double* A) {
@@ -531,6 +572,13 @@ CenterTable scene_centers(const ParsedDataset& ds) {
     double A[16];
     train_to_normalized_inverse(ds, A);
     return scene_centers_t(c2w.data(), n, ds.points.xyz.data(), ds.points.num(), 3, A);
+}
+
+ResolvedCenter parse_center(const DatasetParserConfig& cfg, const double* c2w,
+                            int64_t n, const ColmapPoints3D& points) {
+    if (cfg.center) return {center_mode_from_name(cfg.center_mode), *cfg.center};
+    return resolve_scene_center(cfg.center_mode, cfg.center_auto_threshold, c2w, n,
+                                points.xyz.data(), points.num());
 }
 
 std::vector<char> outlier_keep_mask(const std::vector<double>& pos,
@@ -628,6 +676,21 @@ void fit_camera_resolution(const DatasetParserConfig& cfg,
     if (src && src->source_model >= 0)
         srccam::rescale(src->source_model, src->params, sx, sy);
     W = tw; H = th;
+}
+
+void read_gauge(const std::string& dir, ParsedDataset& ds) {
+    std::ifstream f(dir + "/gauge.txt");
+    if (!f) return;
+    // Line at a time, so a comment with an odd number of words cannot shift
+    // every key onto the wrong value.
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream in(line);
+        std::string key, value;
+        if (!(in >> key >> value) || key[0] == '#') continue;
+        if (key == "oriented") ds.gauge_oriented = value == "1";
+        else if (key == "metric") ds.gauge_metric = value == "1";
+    }
 }
 
 }  // namespace dsparse
