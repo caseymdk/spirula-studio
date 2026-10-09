@@ -1,14 +1,14 @@
 #!/bin/bash
 # Apple Silicon macOS build (Vulkan through MoltenVK -> build/spirula).
-# Bakes in the sibling COLMAP build (../colmap/BUILD.sh) as the GUI's
+# Bakes in the sibling COLMAP build (../colmap/BUILD_MAC.sh) as the GUI's
 # default; COLMAP_EXE=/path/to/colmap overrides it. Extra args go to CMake.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-COLMAP_EXE=${COLMAP_EXE:-$(cd .. && pwd)/colmap/install/bin/colmap}
+COLMAP_EXE=${COLMAP_EXE:-$(cd .. && pwd)/colmap/build/src/colmap/exe/colmap}
 if [ ! -x "$COLMAP_EXE" ]; then
-    echo "COLMAP not found at $COLMAP_EXE -- run ../colmap/BUILD.sh first" >&2
+    echo "COLMAP not found at $COLMAP_EXE -- run ../colmap/BUILD_MAC.sh first" >&2
     exit 1
 fi
 
