@@ -13,6 +13,31 @@
 #include "core/AabbQuant.cuh"
 namespace cg = cooperative_groups;
 
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 700
+// cg::labeled_partition needs match.any (sm_70+). Gathers every active lane by
+// shuffle instead: each lane ends with its label group's sum, and the group's
+// lowest lane gets true.
+template <int K>
+__device__ bool labeled_warp_sum(uint32_t label, float (&v)[K]) {
+    const unsigned active = __activemask();
+    float sum[K] = {};
+    int leader = -1;
+    for (unsigned m = active; m; m &= m - 1) {
+        const int lane = __ffs(m) - 1;
+        const bool same = __shfl_sync(active, label, lane) == label;
+        if (same && leader < 0) leader = lane;
+        #pragma unroll
+        for (int k = 0; k < K; k++) {
+            const float x = __shfl_sync(active, v[k], lane);
+            if (same) sum[k] += x;
+        }
+    }
+    #pragma unroll
+    for (int k = 0; k < K; k++) v[k] = sum[k];
+    return leader == (int)_laneIdx();
+}
+#endif
+
 
 template<
     typename SplatPrimitive,
@@ -106,13 +131,29 @@ __global__ void projection_fused_bwd_kernel(
     v_splat_world.atomicStore(v_splats_world, gid);
 
     if (v_viewmats != nullptr) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 700
+        float v[12];
+        #pragma unroll
+        for (int i = 0; i < 3; i++) {
+            v[i * 3 + 0] = v_R[i].x; v[i * 3 + 1] = v_R[i].y; v[i * 3 + 2] = v_R[i].z;
+        }
+        v[9] = v_t.x; v[10] = v_t.y; v[11] = v_t.z;
+        const bool leader = labeled_warp_sum(cid, v);
+        #pragma unroll
+        for (int i = 0; i < 3; i++) {
+            v_R[i].x = v[i * 3 + 0]; v_R[i].y = v[i * 3 + 1]; v_R[i].z = v[i * 3 + 2];
+        }
+        v_t = {v[9], v[10], v[11]};
+#else
         auto warp = cg::tiled_partition<WARP_SIZE>(cg::this_thread_block());
         auto warp_group_c = cg::labeled_partition(warp, cid);
         warpSum(v_R[0], warp_group_c);
         warpSum(v_R[1], warp_group_c);
         warpSum(v_R[2], warp_group_c);
         warpSum(v_t, warp_group_c);
-        if (warp_group_c.thread_rank() == 0) {
+        const bool leader = warp_group_c.thread_rank() == 0;
+#endif
+        if (leader) {
             v_viewmats += cid * 16;
             #pragma unroll
             for (uint32_t i = 0; i < 3; i++) { // rows
